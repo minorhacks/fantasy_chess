@@ -45,9 +45,17 @@ extern crate clap;
 extern crate maplit;
 extern crate reqwest;
 extern crate serde_json;
+extern crate thiserror;
 extern crate tokio;
 
 use std::collections::HashMap;
+use thiserror::Error as ThisError;
+
+#[derive(ThisError, Debug)]
+enum Error {
+    #[error("piece not found on encoded square: {0}")]
+    PieceNotFound(char),
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct GameResponse {
@@ -60,40 +68,64 @@ struct Game {
     move_list: String,
 }
 
-#[derive(Debug, Hash, Eq, PartialEq)]
-enum Piece {
-    WhiteKing,
-    WhiteQueen,
-    WhiteRookA,
-    WhiteRookH,
-    WhiteKnightB,
-    WhiteKnightG,
-    WhiteBishopC,
-    WhiteBishopF,
-    WhitePawnA,
-    WhitePawnB,
-    WhitePawnC,
-    WhitePawnD,
-    WhitePawnE,
-    WhitePawnF,
-    WhitePawnG,
-    WhitePawnH,
-    BlackKing,
-    BlackQueen,
-    BlackRookA,
-    BlackRookH,
-    BlackKnightB,
-    BlackKnightG,
-    BlackBishopC,
-    BlackBishopF,
-    BlackPawnA,
-    BlackPawnB,
-    BlackPawnC,
-    BlackPawnD,
-    BlackPawnE,
-    BlackPawnF,
-    BlackPawnG,
-    BlackPawnH,
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+enum PieceType {
+    King,
+    Queen,
+    Bishop,
+    Knight,
+    Rook,
+    Pawn,
+}
+
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+enum File {
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    H,
+}
+
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+enum Color {
+    White,
+    Black,
+}
+
+#[derive(Hash, Eq, PartialEq, Clone)]
+struct Piece {
+    piece_type: PieceType,
+    color: Color,
+    file: File,
+    value: u32,
+}
+
+impl Piece {
+    fn new(piece_type: PieceType, color: Color, file: File, value: u32) -> Piece {
+        Piece {
+            piece_type,
+            color,
+            file,
+            value,
+        }
+    }
+}
+
+impl std::fmt::Debug for Piece {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?} {:?}", self.color, self.piece_type)?;
+        match self.piece_type {
+            PieceType::Bishop | PieceType::Knight | PieceType::Rook | PieceType::Pawn => {
+                write!(f, " {:?}", self.file)?
+            }
+            _ => (),
+        }
+        Ok(())
+    }
 }
 
 struct Board {
@@ -109,38 +141,39 @@ impl Board {
     fn starting() -> Board {
         Board {
             piece_map: maplit::hashmap! {
-                'a' => Piece::WhiteRookA,
-                'b' => Piece::WhiteKnightB,
-                'c' => Piece::WhiteBishopC,
-                'd' => Piece::WhiteQueen,
-                'e' => Piece::WhiteKing,
-                'f' => Piece::WhiteBishopF,
-                'g' => Piece::WhiteKnightG,
-                'h' => Piece::WhiteRookH,
-                'i' => Piece::WhitePawnA,
-                'j' => Piece::WhitePawnB,
-                'k' => Piece::WhitePawnC,
-                'l' => Piece::WhitePawnD,
-                'm' => Piece::WhitePawnE,
-                'n' => Piece::WhitePawnF,
-                'o' => Piece::WhitePawnG,
-                'p' => Piece::WhitePawnH,
-                '4' => Piece::BlackRookA,
-                '5' => Piece::BlackKnightB,
-                '6' => Piece::BlackBishopC,
-                '7' => Piece::BlackQueen,
-                '8' => Piece::BlackKing,
-                '9' => Piece::BlackBishopF,
-                '!' => Piece::BlackKnightG,
-                '?' => Piece::BlackRookH,
-                'W' => Piece::BlackPawnA,
-                'X' => Piece::BlackPawnB,
-                'Y' => Piece::BlackPawnC,
-                'Z' => Piece::BlackPawnD,
-                '0' => Piece::BlackPawnE,
-                '1' => Piece::BlackPawnF,
-                '2' => Piece::BlackPawnG,
-                '3' => Piece::BlackPawnH,
+                'a' => Piece::new(PieceType::Rook, Color::White, File::A, 5),
+                'b' => Piece::new(PieceType::Knight, Color::White, File::B, 3),
+                'c' => Piece::new(PieceType::Bishop, Color::White, File::C, 3),
+                'd' => Piece::new(PieceType::Queen, Color::White, File::D, 9),
+                'e' => Piece::new(PieceType::King, Color::White, File::E, 0),
+                'f' => Piece::new(PieceType::Bishop, Color::White, File::F, 3),
+                'g' => Piece::new(PieceType::Knight, Color::White, File::G, 3),
+                'h' => Piece::new(PieceType::Rook, Color::White, File::H, 5),
+                'i' => Piece::new(PieceType::Pawn, Color::White, File::A, 1),
+                'j' => Piece::new(PieceType::Pawn, Color::White, File::B, 1),
+                'k' => Piece::new(PieceType::Pawn, Color::White, File::C, 1),
+                'l' => Piece::new(PieceType::Pawn, Color::White, File::D, 1),
+                'm' => Piece::new(PieceType::Pawn, Color::White, File::E, 1),
+                'n' => Piece::new(PieceType::Pawn, Color::White, File::F, 1),
+                'o' => Piece::new(PieceType::Pawn, Color::White, File::G, 1),
+                'p' => Piece::new(PieceType::Pawn, Color::White, File::H, 1),
+
+                '4' => Piece::new(PieceType::Rook, Color::Black, File::A, 5),
+                '5' => Piece::new(PieceType::Knight, Color::Black, File::B, 3),
+                '6' => Piece::new(PieceType::Bishop, Color::Black, File::C, 3),
+                '7' => Piece::new(PieceType::Queen, Color::Black, File::D, 9),
+                '8' => Piece::new(PieceType::King, Color::Black, File::E, 0),
+                '9' => Piece::new(PieceType::Bishop, Color::Black, File::F, 3),
+                '!' => Piece::new(PieceType::Knight, Color::Black, File::G, 3),
+                '?' => Piece::new(PieceType::Rook, Color::Black, File::H, 5),
+                'W' => Piece::new(PieceType::Pawn, Color::Black, File::A, 1),
+                'X' => Piece::new(PieceType::Pawn, Color::Black, File::B, 1),
+                'Y' => Piece::new(PieceType::Pawn, Color::Black, File::C, 1),
+                'Z' => Piece::new(PieceType::Pawn, Color::Black, File::D, 1),
+                '0' => Piece::new(PieceType::Pawn, Color::Black, File::E, 1),
+                '1' => Piece::new(PieceType::Pawn, Color::Black, File::F, 1),
+                '2' => Piece::new(PieceType::Pawn, Color::Black, File::G, 1),
+                '3' => Piece::new(PieceType::Pawn, Color::Black, File::H, 1),
             },
         }
     }
@@ -150,7 +183,90 @@ impl Board {
         start: char,
         end: char,
     ) -> Result<(Piece, u32), Box<dyn std::error::Error>> {
-        todo!();
+        // Get the piece at the start location
+        let (_loc, moved_piece) = self
+            .piece_map
+            .remove_entry(&start)
+            .ok_or(Error::PieceNotFound(start))?;
+        // Get the piece at the end location; if there is one, the score is the value of the piece
+        let score = self
+            .piece_map
+            .get(&end)
+            .map(|captured_piece| captured_piece.value)
+            .unwrap_or(0);
+        // Move the piece from the start to the end
+        // TODO: Handle en passant
+        match (moved_piece.clone(), start, end) {
+            // White kingside castle
+            (
+                Piece {
+                    piece_type: PieceType::King,
+                    ..
+                },
+                'e',
+                'g',
+            ) => {
+                self.piece_map.insert(end, moved_piece.clone());
+                let (_, rook) = self
+                    .piece_map
+                    .remove_entry(&'h')
+                    .ok_or(Error::PieceNotFound('h'))?;
+                self.piece_map.insert('f', rook);
+            }
+            // White queenside castle
+            (
+                Piece {
+                    piece_type: PieceType::King,
+                    ..
+                },
+                'e',
+                'c',
+            ) => {
+                self.piece_map.insert(end, moved_piece.clone());
+                let (_, rook) = self
+                    .piece_map
+                    .remove_entry(&'a')
+                    .ok_or(Error::PieceNotFound('a'))?;
+                self.piece_map.insert('d', rook);
+            }
+            // Black kingside castle
+            (
+                Piece {
+                    piece_type: PieceType::King,
+                    ..
+                },
+                '8',
+                '!',
+            ) => {
+                self.piece_map.insert(end, moved_piece.clone());
+                let (_, rook) = self
+                    .piece_map
+                    .remove_entry(&'?')
+                    .ok_or(Error::PieceNotFound('?'))?;
+                self.piece_map.insert('9', rook);
+            }
+            // Black queenside castle
+            (
+                Piece {
+                    piece_type: PieceType::King,
+                    ..
+                },
+                '8',
+                '6',
+            ) => {
+                self.piece_map.insert(end, moved_piece.clone());
+                let (_, rook) = self
+                    .piece_map
+                    .remove_entry(&'4')
+                    .ok_or(Error::PieceNotFound('4'))?;
+                self.piece_map.insert('7', rook);
+            }
+            _ => {
+                self.piece_map.insert(end, moved_piece.clone());
+            }
+        }
+        // Return the starting piece along with its score
+        Ok((moved_piece, score))
     }
 }
 
