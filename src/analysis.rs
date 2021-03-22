@@ -24,6 +24,19 @@ enum PieceType {
   Pawn,
 }
 
+impl PieceType {
+  fn value(&self) -> u32 {
+    match self {
+      PieceType::King => 0, // TODO: what should be the value of checkmate?
+      PieceType::Queen => 9,
+      PieceType::Bishop => 3,
+      PieceType::Knight => 3,
+      PieceType::Rook => 5,
+      PieceType::Pawn => 1,
+    }
+  }
+}
+
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 enum File {
   A,
@@ -47,15 +60,17 @@ struct Piece {
   piece_type: PieceType,
   color: Color,
   file: File,
-  // TODO: This probably shouldn't be stored here; a piece with the same color,
-  // piece type, rank, can have a different value; instead, value should be
-  // calculated from piece type.
-  value: u32,
 }
 
 impl Piece {
-  fn new(piece_type: PieceType, color: Color, file: File, value: u32) -> Piece {
-    Piece { piece_type, color, file, value }
+  fn new(piece_type: PieceType, color: Color, file: File) -> Piece {
+    Piece { piece_type, color, file }
+  }
+
+  fn value(&self) -> u32 {
+    // TODO: If this piece promotes, we want to return the promoted value
+    // rather than the value of this original piece.
+    self.piece_type.value()
   }
 }
 
@@ -98,39 +113,39 @@ impl Board {
   fn starting() -> Board {
     Board {
       piece_map: maplit::hashmap! {
-          'a' => Piece::new(PieceType::Rook, Color::White, File::A, 5),
-          'b' => Piece::new(PieceType::Knight, Color::White, File::B, 3),
-          'c' => Piece::new(PieceType::Bishop, Color::White, File::C, 3),
-          'd' => Piece::new(PieceType::Queen, Color::White, File::D, 9),
-          'e' => Piece::new(PieceType::King, Color::White, File::E, 0),
-          'f' => Piece::new(PieceType::Bishop, Color::White, File::F, 3),
-          'g' => Piece::new(PieceType::Knight, Color::White, File::G, 3),
-          'h' => Piece::new(PieceType::Rook, Color::White, File::H, 5),
-          'i' => Piece::new(PieceType::Pawn, Color::White, File::A, 1),
-          'j' => Piece::new(PieceType::Pawn, Color::White, File::B, 1),
-          'k' => Piece::new(PieceType::Pawn, Color::White, File::C, 1),
-          'l' => Piece::new(PieceType::Pawn, Color::White, File::D, 1),
-          'm' => Piece::new(PieceType::Pawn, Color::White, File::E, 1),
-          'n' => Piece::new(PieceType::Pawn, Color::White, File::F, 1),
-          'o' => Piece::new(PieceType::Pawn, Color::White, File::G, 1),
-          'p' => Piece::new(PieceType::Pawn, Color::White, File::H, 1),
+          'a' => Piece::new(PieceType::Rook, Color::White, File::A),
+          'b' => Piece::new(PieceType::Knight, Color::White, File::B),
+          'c' => Piece::new(PieceType::Bishop, Color::White, File::C),
+          'd' => Piece::new(PieceType::Queen, Color::White, File::D),
+          'e' => Piece::new(PieceType::King, Color::White, File::E),
+          'f' => Piece::new(PieceType::Bishop, Color::White, File::F),
+          'g' => Piece::new(PieceType::Knight, Color::White, File::G),
+          'h' => Piece::new(PieceType::Rook, Color::White, File::H),
+          'i' => Piece::new(PieceType::Pawn, Color::White, File::A),
+          'j' => Piece::new(PieceType::Pawn, Color::White, File::B),
+          'k' => Piece::new(PieceType::Pawn, Color::White, File::C),
+          'l' => Piece::new(PieceType::Pawn, Color::White, File::D),
+          'm' => Piece::new(PieceType::Pawn, Color::White, File::E),
+          'n' => Piece::new(PieceType::Pawn, Color::White, File::F),
+          'o' => Piece::new(PieceType::Pawn, Color::White, File::G),
+          'p' => Piece::new(PieceType::Pawn, Color::White, File::H),
 
-          '4' => Piece::new(PieceType::Rook, Color::Black, File::A, 5),
-          '5' => Piece::new(PieceType::Knight, Color::Black, File::B, 3),
-          '6' => Piece::new(PieceType::Bishop, Color::Black, File::C, 3),
-          '7' => Piece::new(PieceType::Queen, Color::Black, File::D, 9),
-          '8' => Piece::new(PieceType::King, Color::Black, File::E, 0),
-          '9' => Piece::new(PieceType::Bishop, Color::Black, File::F, 3),
-          '!' => Piece::new(PieceType::Knight, Color::Black, File::G, 3),
-          '?' => Piece::new(PieceType::Rook, Color::Black, File::H, 5),
-          'W' => Piece::new(PieceType::Pawn, Color::Black, File::A, 1),
-          'X' => Piece::new(PieceType::Pawn, Color::Black, File::B, 1),
-          'Y' => Piece::new(PieceType::Pawn, Color::Black, File::C, 1),
-          'Z' => Piece::new(PieceType::Pawn, Color::Black, File::D, 1),
-          '0' => Piece::new(PieceType::Pawn, Color::Black, File::E, 1),
-          '1' => Piece::new(PieceType::Pawn, Color::Black, File::F, 1),
-          '2' => Piece::new(PieceType::Pawn, Color::Black, File::G, 1),
-          '3' => Piece::new(PieceType::Pawn, Color::Black, File::H, 1),
+          '4' => Piece::new(PieceType::Rook, Color::Black, File::A),
+          '5' => Piece::new(PieceType::Knight, Color::Black, File::B),
+          '6' => Piece::new(PieceType::Bishop, Color::Black, File::C),
+          '7' => Piece::new(PieceType::Queen, Color::Black, File::D),
+          '8' => Piece::new(PieceType::King, Color::Black, File::E),
+          '9' => Piece::new(PieceType::Bishop, Color::Black, File::F),
+          '!' => Piece::new(PieceType::Knight, Color::Black, File::G),
+          '?' => Piece::new(PieceType::Rook, Color::Black, File::H),
+          'W' => Piece::new(PieceType::Pawn, Color::Black, File::A),
+          'X' => Piece::new(PieceType::Pawn, Color::Black, File::B),
+          'Y' => Piece::new(PieceType::Pawn, Color::Black, File::C),
+          'Z' => Piece::new(PieceType::Pawn, Color::Black, File::D),
+          '0' => Piece::new(PieceType::Pawn, Color::Black, File::E),
+          '1' => Piece::new(PieceType::Pawn, Color::Black, File::F),
+          '2' => Piece::new(PieceType::Pawn, Color::Black, File::G),
+          '3' => Piece::new(PieceType::Pawn, Color::Black, File::H),
       },
     }
   }
@@ -147,7 +162,7 @@ impl Board {
     let score = self
       .piece_map
       .get(&end)
-      .map(|captured_piece| captured_piece.value)
+      .map(|captured_piece| captured_piece.value())
       .unwrap_or(0);
     // Move the piece from the start to the end
     // TODO: Handle en passant
@@ -204,40 +219,40 @@ pub struct PieceScore {
 
 lazy_static! {
   static ref WHITE_PIECES: Vec<Piece> = vec![
-    Piece::new(PieceType::King, Color::White, File::E, 0),
-    Piece::new(PieceType::Queen, Color::White, File::D, 9),
-    Piece::new(PieceType::Rook, Color::White, File::A, 5),
-    Piece::new(PieceType::Rook, Color::White, File::H, 5),
-    Piece::new(PieceType::Knight, Color::White, File::B, 3),
-    Piece::new(PieceType::Knight, Color::White, File::G, 3),
-    Piece::new(PieceType::Bishop, Color::White, File::C, 3),
-    Piece::new(PieceType::Bishop, Color::White, File::F, 3),
-    Piece::new(PieceType::Pawn, Color::White, File::A, 1),
-    Piece::new(PieceType::Pawn, Color::White, File::B, 1),
-    Piece::new(PieceType::Pawn, Color::White, File::C, 1),
-    Piece::new(PieceType::Pawn, Color::White, File::D, 1),
-    Piece::new(PieceType::Pawn, Color::White, File::E, 1),
-    Piece::new(PieceType::Pawn, Color::White, File::F, 1),
-    Piece::new(PieceType::Pawn, Color::White, File::G, 1),
-    Piece::new(PieceType::Pawn, Color::White, File::H, 1),
+    Piece::new(PieceType::King, Color::White, File::E),
+    Piece::new(PieceType::Queen, Color::White, File::D),
+    Piece::new(PieceType::Rook, Color::White, File::A),
+    Piece::new(PieceType::Rook, Color::White, File::H),
+    Piece::new(PieceType::Knight, Color::White, File::B),
+    Piece::new(PieceType::Knight, Color::White, File::G),
+    Piece::new(PieceType::Bishop, Color::White, File::C),
+    Piece::new(PieceType::Bishop, Color::White, File::F),
+    Piece::new(PieceType::Pawn, Color::White, File::A),
+    Piece::new(PieceType::Pawn, Color::White, File::B),
+    Piece::new(PieceType::Pawn, Color::White, File::C),
+    Piece::new(PieceType::Pawn, Color::White, File::D),
+    Piece::new(PieceType::Pawn, Color::White, File::E),
+    Piece::new(PieceType::Pawn, Color::White, File::F),
+    Piece::new(PieceType::Pawn, Color::White, File::G),
+    Piece::new(PieceType::Pawn, Color::White, File::H),
   ];
   static ref BLACK_PIECES: Vec<Piece> = vec![
-    Piece::new(PieceType::King, Color::Black, File::E, 0),
-    Piece::new(PieceType::Queen, Color::Black, File::D, 9),
-    Piece::new(PieceType::Rook, Color::Black, File::A, 5),
-    Piece::new(PieceType::Rook, Color::Black, File::H, 5),
-    Piece::new(PieceType::Knight, Color::Black, File::B, 3),
-    Piece::new(PieceType::Knight, Color::Black, File::G, 3),
-    Piece::new(PieceType::Bishop, Color::Black, File::C, 3),
-    Piece::new(PieceType::Bishop, Color::Black, File::F, 3),
-    Piece::new(PieceType::Pawn, Color::Black, File::A, 1),
-    Piece::new(PieceType::Pawn, Color::Black, File::B, 1),
-    Piece::new(PieceType::Pawn, Color::Black, File::C, 1),
-    Piece::new(PieceType::Pawn, Color::Black, File::D, 1),
-    Piece::new(PieceType::Pawn, Color::Black, File::E, 1),
-    Piece::new(PieceType::Pawn, Color::Black, File::F, 1),
-    Piece::new(PieceType::Pawn, Color::Black, File::G, 1),
-    Piece::new(PieceType::Pawn, Color::Black, File::H, 1),
+    Piece::new(PieceType::King, Color::Black, File::E),
+    Piece::new(PieceType::Queen, Color::Black, File::D),
+    Piece::new(PieceType::Rook, Color::Black, File::A),
+    Piece::new(PieceType::Rook, Color::Black, File::H),
+    Piece::new(PieceType::Knight, Color::Black, File::B),
+    Piece::new(PieceType::Knight, Color::Black, File::G),
+    Piece::new(PieceType::Bishop, Color::Black, File::C),
+    Piece::new(PieceType::Bishop, Color::Black, File::F),
+    Piece::new(PieceType::Pawn, Color::Black, File::A),
+    Piece::new(PieceType::Pawn, Color::Black, File::B),
+    Piece::new(PieceType::Pawn, Color::Black, File::C),
+    Piece::new(PieceType::Pawn, Color::Black, File::D),
+    Piece::new(PieceType::Pawn, Color::Black, File::E),
+    Piece::new(PieceType::Pawn, Color::Black, File::F),
+    Piece::new(PieceType::Pawn, Color::Black, File::G),
+    Piece::new(PieceType::Pawn, Color::Black, File::H),
   ];
 }
 
@@ -317,37 +332,27 @@ ad Mo
     let score = score.unwrap();
     assert_eq!(
       Some(&3),
-      score.scores.get(&Piece::new(
-        PieceType::Bishop,
-        Color::White,
-        File::C,
-        3
-      ))
+      score.scores.get(&Piece::new(PieceType::Bishop, Color::White, File::C))
     );
     assert_eq!(
       Some(&3),
-      score.scores.get(&Piece::new(PieceType::Rook, Color::Black, File::H, 5))
+      score.scores.get(&Piece::new(PieceType::Rook, Color::Black, File::H))
     );
     assert_eq!(
       Some(&1),
-      score.scores.get(&Piece::new(PieceType::Pawn, Color::White, File::D, 1))
+      score.scores.get(&Piece::new(PieceType::Pawn, Color::White, File::D))
     );
     assert_eq!(
       Some(&3),
-      score.scores.get(&Piece::new(
-        PieceType::Bishop,
-        Color::Black,
-        File::F,
-        3
-      ))
+      score.scores.get(&Piece::new(PieceType::Bishop, Color::Black, File::F))
     );
     assert_eq!(
       Some(&3),
-      score.scores.get(&Piece::new(PieceType::Queen, Color::White, File::D, 9))
+      score.scores.get(&Piece::new(PieceType::Queen, Color::White, File::D))
     );
     assert_eq!(
       Some(&1),
-      score.scores.get(&Piece::new(PieceType::Queen, Color::Black, File::D, 9))
+      score.scores.get(&Piece::new(PieceType::Queen, Color::Black, File::D))
     );
   }
 }
