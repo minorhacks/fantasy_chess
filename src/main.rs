@@ -74,7 +74,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let uri = format!("https://www.chess.com/callback/live/game/{}", chess_id);
     let body = reqwest::get(&uri).await?.text().await?;
     let res: api::GameResponse = serde_json::from_str(&body)?;
-    println!("{:?}", res);
     // API documentation:
     // https://github.com/andyruwruw/chess-web-api/blob/master/documentation/GAME.md
     // moveList parsing:
@@ -82,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Calculate which pieces capture how many points
     let score = analysis::score_game(&res.game)?;
     // Print output
-    println!("{:?}", score);
+    println!("{}", score);
   } else {
     unimplemented!("command not implemented");
   }

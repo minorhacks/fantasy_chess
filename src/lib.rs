@@ -1,4 +1,5 @@
 pub mod analysis;
 pub mod api;
 
-extern crate maplit;
+#[macro_use]
+extern crate lazy_static;

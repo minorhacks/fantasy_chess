@@ -1,4 +1,5 @@
 extern crate clap;
+extern crate lazy_static;
 extern crate serde_json;
 extern crate thiserror;
 extern crate tokio;
@@ -69,13 +70,25 @@ impl std::fmt::Debug for Piece {
   }
 }
 
-struct Board {
-  piece_map: HashMap<char, Piece>,
+impl std::fmt::Display for Piece {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    if f.alternate() {
+      write!(f, "{:?} ", self.color)?;
+    }
+    write!(f, "{:?}", self.piece_type)?;
+    match self.piece_type {
+      PieceType::Bishop
+      | PieceType::Knight
+      | PieceType::Rook
+      | PieceType::Pawn => write!(f, " {:?}", self.file)?,
+      _ => (),
+    }
+    Ok(())
+  }
 }
 
-#[derive(Debug)]
-pub struct PieceScore {
-  scores: HashMap<Piece, u32>,
+struct Board {
+  piece_map: HashMap<char, Piece>,
 }
 
 impl Board {
@@ -178,6 +191,67 @@ impl Board {
     }
     // Return the starting piece along with its score
     Ok((moved_piece, score))
+  }
+}
+
+#[derive(Debug)]
+pub struct PieceScore {
+  scores: HashMap<Piece, u32>,
+}
+
+lazy_static! {
+  static ref WHITE_PIECES: Vec<Piece> = vec![
+    Piece::new(PieceType::King, Color::White, File::E, 0),
+    Piece::new(PieceType::Queen, Color::White, File::D, 9),
+    Piece::new(PieceType::Rook, Color::White, File::A, 5),
+    Piece::new(PieceType::Rook, Color::White, File::H, 5),
+    Piece::new(PieceType::Knight, Color::White, File::B, 3),
+    Piece::new(PieceType::Knight, Color::White, File::G, 3),
+    Piece::new(PieceType::Bishop, Color::White, File::C, 3),
+    Piece::new(PieceType::Bishop, Color::White, File::F, 3),
+    Piece::new(PieceType::Pawn, Color::White, File::A, 1),
+    Piece::new(PieceType::Pawn, Color::White, File::B, 1),
+    Piece::new(PieceType::Pawn, Color::White, File::C, 1),
+    Piece::new(PieceType::Pawn, Color::White, File::D, 1),
+    Piece::new(PieceType::Pawn, Color::White, File::E, 1),
+    Piece::new(PieceType::Pawn, Color::White, File::F, 1),
+    Piece::new(PieceType::Pawn, Color::White, File::G, 1),
+    Piece::new(PieceType::Pawn, Color::White, File::H, 1),
+  ];
+  static ref BLACK_PIECES: Vec<Piece> = vec![
+    Piece::new(PieceType::King, Color::Black, File::E, 0),
+    Piece::new(PieceType::Queen, Color::Black, File::D, 9),
+    Piece::new(PieceType::Rook, Color::Black, File::A, 5),
+    Piece::new(PieceType::Rook, Color::Black, File::H, 5),
+    Piece::new(PieceType::Knight, Color::Black, File::B, 3),
+    Piece::new(PieceType::Knight, Color::Black, File::G, 3),
+    Piece::new(PieceType::Bishop, Color::Black, File::C, 3),
+    Piece::new(PieceType::Bishop, Color::Black, File::F, 3),
+    Piece::new(PieceType::Pawn, Color::Black, File::A, 1),
+    Piece::new(PieceType::Pawn, Color::Black, File::B, 1),
+    Piece::new(PieceType::Pawn, Color::Black, File::C, 1),
+    Piece::new(PieceType::Pawn, Color::Black, File::D, 1),
+    Piece::new(PieceType::Pawn, Color::Black, File::E, 1),
+    Piece::new(PieceType::Pawn, Color::Black, File::F, 1),
+    Piece::new(PieceType::Pawn, Color::Black, File::G, 1),
+    Piece::new(PieceType::Pawn, Color::Black, File::H, 1),
+  ];
+}
+
+impl std::fmt::Display for PieceScore {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    writeln!(f, "White:")?;
+    WHITE_PIECES
+      .iter()
+      .map(|p| self.scores.get_key_value(p).or(Some((p, &0))).unwrap())
+      .try_for_each(|(name, score)| writeln!(f, "\t{} - {}", name, score))?;
+    writeln!(f)?;
+    writeln!(f, "Black:")?;
+    BLACK_PIECES
+      .iter()
+      .map(|p| self.scores.get_key_value(p).or(Some((p, &0))).unwrap())
+      .try_for_each(|(name, score)| writeln!(f, "\t{} - {}", name, score))?;
+    Ok(())
   }
 }
 
