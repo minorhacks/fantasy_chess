@@ -355,4 +355,54 @@ ad Mo
       score.scores.get(&Piece::new(PieceType::Queen, Color::Black, File::D))
     );
   }
+
+  #[test]
+  fn test_score_game_en_passant_white_promote_queen() {
+    let game_9695070671 = api::Game {
+      move_list: strip_space(
+        r#"
+mC 0K
+lB 3N
+BJ YI
+JQ XH
+fH WG
+gv ZJ
+bs 1L
+cD 2M
+dl 6S
+eg 5Q
+Hy 7Z
+ae 86
+CJ SJ
+eK 9I
+vM In
+gn !T
+lJ TJ
+sH JD
+jz ZB
+nw Bt
+fv tv
+wv 7t
+vD QB
+HB tu
+KI 67
+Du ?8
+BS 70
+zG 87
+GO 7d
+kA LD
+uD df
+DK fT
+OW TS
+MS NF
+W~ 01
+49 1U
+9T UN
+TM
+"#,
+      ),
+    };
+    let score = score_game(&game_9695070671);
+    assert!(matches!(score, Ok(_)), "score_game returned {:?}", score);
+  }
 }
