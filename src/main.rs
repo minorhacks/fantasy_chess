@@ -40,6 +40,7 @@
 //     pawn_g - 1
 //     pawn_h - 1
 
+extern crate anyhow;
 extern crate clap;
 extern crate maplit;
 extern crate reqwest;
@@ -51,7 +52,7 @@ use fantasy_chess::analysis;
 use fantasy_chess::api;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> anyhow::Result<()> {
   // Parse arguments
   let matches = clap::App::new("fantasy_chess")
     .version("0.1.0")

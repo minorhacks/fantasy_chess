@@ -136,7 +136,7 @@ impl Board {
     &mut self,
     start: char,
     end: char,
-  ) -> Result<(Piece, u32), Box<dyn std::error::Error>> {
+  ) -> Result<(Piece, u32), Error> {
     // Get the piece at the start location
     let (_loc, moved_piece) =
       self.piece_map.remove_entry(&start).ok_or(Error::PieceNotFound(start))?;
@@ -255,9 +255,7 @@ impl std::fmt::Display for PieceScore {
   }
 }
 
-pub fn score_game(
-  game: &api::Game,
-) -> Result<PieceScore, Box<dyn std::error::Error>> {
+pub fn score_game(game: &api::Game) -> Result<PieceScore, Error> {
   let mut final_score = PieceScore { scores: HashMap::new() };
   let mut board = Board::starting();
   let moves = &game.move_list.clone();
