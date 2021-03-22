@@ -47,6 +47,9 @@ struct Piece {
   piece_type: PieceType,
   color: Color,
   file: File,
+  // TODO: This probably shouldn't be stored here; a piece with the same color,
+  // piece type, rank, can have a different value; instead, value should be
+  // calculated from piece type.
   value: u32,
 }
 
@@ -270,4 +273,81 @@ pub fn score_game(game: &api::Game) -> Result<PieceScore, Error> {
     }
   }
   Ok(final_score)
+}
+
+#[cfg(test)]
+mod tests {
+
+  use super::*;
+  use crate::api;
+
+  fn strip_space(s: &str) -> String {
+    s.chars().filter(|c| !c.is_whitespace()).collect()
+  }
+
+  #[test]
+  fn test_score_game_simple() {
+    let game_7545694171 = api::Game {
+      move_list: strip_space(
+        r#"
+mC 0K
+bs 1L
+lt !T
+gv 9I
+sy 70
+cM 8!
+iq ZJ
+jz IP
+tB 3V
+MT 9T
+BK TQ
+fH QU
+eg 6S
+ks WG
+vB PB
+dc 4W
+cd W4
+dB 0M
+ad Mo
+"#,
+      ),
+    };
+    let score = score_game(&game_7545694171);
+    assert!(score.is_ok());
+    let score = score.unwrap();
+    assert_eq!(
+      Some(&3),
+      score.scores.get(&Piece::new(
+        PieceType::Bishop,
+        Color::White,
+        File::C,
+        3
+      ))
+    );
+    assert_eq!(
+      Some(&3),
+      score.scores.get(&Piece::new(PieceType::Rook, Color::Black, File::H, 5))
+    );
+    assert_eq!(
+      Some(&1),
+      score.scores.get(&Piece::new(PieceType::Pawn, Color::White, File::D, 1))
+    );
+    assert_eq!(
+      Some(&3),
+      score.scores.get(&Piece::new(
+        PieceType::Bishop,
+        Color::Black,
+        File::F,
+        3
+      ))
+    );
+    assert_eq!(
+      Some(&3),
+      score.scores.get(&Piece::new(PieceType::Queen, Color::White, File::D, 9))
+    );
+    assert_eq!(
+      Some(&1),
+      score.scores.get(&Piece::new(PieceType::Queen, Color::Black, File::D, 9))
+    );
+  }
 }
