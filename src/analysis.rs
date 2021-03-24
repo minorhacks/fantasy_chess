@@ -12,6 +12,8 @@ use thiserror::Error as ThisError;
 pub enum Error {
   #[error("piece not found on encoded square: {0}")]
   PieceNotFound(char),
+  #[error("en passant capture not found on encoded square: {0}")]
+  EnPassantPieceNotFound(char),
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
@@ -60,17 +62,23 @@ struct Piece {
   piece_type: PieceType,
   color: Color,
   file: File,
+  promoted_value: Option<u32>,
 }
 
 impl Piece {
   fn new(piece_type: PieceType, color: Color, file: File) -> Piece {
-    Piece { piece_type, color, file }
+    Piece { piece_type, color, file, promoted_value: None }
+  }
+
+  fn with_promotion(mut self, piece_type: &PieceType) -> Piece {
+    self.promoted_value = Some(piece_type.value());
+    self
   }
 
   fn value(&self) -> u32 {
-    // TODO: If this piece promotes, we want to return the promoted value
-    // rather than the value of this original piece.
-    self.piece_type.value()
+    // Piece defers to the value of its type, unless it's been promoted, in
+    // which case the value is overridden in promoted_value.
+    self.promoted_value.unwrap_or_else(|| self.piece_type.value())
   }
 }
 
@@ -107,6 +115,7 @@ impl std::fmt::Display for Piece {
 
 struct Board {
   piece_map: HashMap<char, Piece>,
+  last_move: Option<(PieceType, char, char)>,
 }
 
 impl Board {
@@ -147,6 +156,7 @@ impl Board {
           '2' => Piece::new(PieceType::Pawn, Color::Black, File::G),
           '3' => Piece::new(PieceType::Pawn, Color::Black, File::H),
       },
+      last_move: None,
     }
   }
 
@@ -155,18 +165,83 @@ impl Board {
     start: char,
     end: char,
   ) -> Result<(Piece, u32), Error> {
+    // Fetch the last move. On all exits to this function, set the last move as
+    // this move for the next iteration. We need the last move to detect en
+    // passant situations.
+    let last_move = std::mem::take(&mut self.last_move);
+
     // Get the piece at the start location
     let (_loc, moved_piece) =
       self.piece_map.remove_entry(&start).ok_or(Error::PieceNotFound(start))?;
-    // Get the piece at the end location; if there is one, the score is the value of the piece
-    let score = self
+
+    // Promotion is handled here by looking at the end move; if it is a
+    // promotion move, it will have a special character that doesn't correspond
+    // to any square on the board. From this char, we can deduce:
+    // * the promotion square, which is calculated based on the promotion
+    //   direction and the starting square
+    // * the piece type that this piece is promoted to
+    // We use the promotion piece type to set the value of the piece, without
+    // changing the definition of the piece itself. So Pawn on Rank A will
+    // always be Pawn on Rank A (so we have continuity in our points tracking),
+    // but if it gets promoted to a queen on the board then its capture will be
+    // worth 9.
+    if let Some(&next_square_lookup) = PROMOTION_DIR.get(&end) {
+      let promotion = PROMOTION_TYPE.get(&end).unwrap_or_else(|| {
+        unreachable!(
+          "encoded promotion '{}' has no corresponding piece type",
+          end
+        )
+      });
+      let end = next_square_lookup.get(&start).unwrap_or_else(|| {
+        unreachable!(
+          "piece on encoded square {} has no promotion square",
+          start
+        )
+      });
+      let score = self
+        .piece_map
+        .get(&end)
+        .map(|captured_piece| captured_piece.value())
+        .unwrap_or(0);
+      self
+        .piece_map
+        .insert(*end, moved_piece.clone().with_promotion(promotion));
+      self.last_move = Some((moved_piece.piece_type.clone(), start, *end));
+      return Ok((moved_piece, score));
+    }
+
+    // Handle regular (non-promotion) moves
+    // Get the piece at the end location; if there is one, the score is the
+    // value of the piece.
+    // If this is an en-passant capture, this calculation will be zero but will
+    // be updated below.
+    let mut score = self
       .piece_map
       .get(&end)
       .map(|captured_piece| captured_piece.value())
       .unwrap_or(0);
-    // Move the piece from the start to the end
-    // TODO: Handle en passant
-    // TODO: Handle promotion
+
+    // Handle en passant
+    // If the last move was a pawn double-move and this move is a pawn capture
+    // corresponding to that particular pawn double-move, then this was an en
+    // passant capture. The piece moved last move is removed from the board, and
+    // the piece moved this turn scores points.
+    if let Some(last_move) = last_move {
+      if EN_PASSANT_MOVES
+        .get(&(start, end))
+        .map(|f| f.0 == last_move.0 && f.1 == last_move.1 && f.2 == last_move.2)
+        == Some(true)
+      {
+        println!("EN PASSANT");
+        // Remove the piece on the last move's end square
+        let captured = self
+          .piece_map
+          .remove(&last_move.2)
+          .ok_or(Error::EnPassantPieceNotFound(last_move.2))?;
+        // Adjust the score for this move's piece based on last move
+        score = captured.value();
+      }
+    }
 
     // Castling is handled here by seeing if we see the king jump 2 squares
     // in one of the possible castling scenarios. If this happens, we need
@@ -207,6 +282,7 @@ impl Board {
         self.piece_map.insert(end, moved_piece.clone());
       }
     }
+    self.last_move = Some((moved_piece.piece_type.clone(), start, end));
     // Return the starting piece along with its score
     Ok((moved_piece, score))
   }
@@ -254,6 +330,117 @@ lazy_static! {
     Piece::new(PieceType::Pawn, Color::Black, File::G),
     Piece::new(PieceType::Pawn, Color::Black, File::H),
   ];
+  static ref PROMOTE_LEFT: HashMap<char, char> = maplit::hashmap! {
+    'j' => 'a',
+    'k' => 'b',
+    'l' => 'c',
+    'm' => 'd',
+    'n' => 'e',
+    'o' => 'f',
+    'p' => 'g',
+    'X' => '4',
+    'Y' => '5',
+    'Z' => '6',
+    '0' => '7',
+    '1' => '8',
+    '2' => '9',
+    '3' => '!',
+  };
+  static ref PROMOTE_STRAIGHT: HashMap<char, char> = maplit::hashmap! {
+    'i' => 'a',
+    'j' => 'b',
+    'k' => 'c',
+    'l' => 'd',
+    'm' => 'e',
+    'n' => 'f',
+    'o' => 'g',
+    'p' => 'h',
+    'W' => '4',
+    'X' => '5',
+    'Y' => '6',
+    'Z' => '7',
+    '0' => '8',
+    '1' => '9',
+    '2' => '!',
+    '3' => '?',
+  };
+  static ref PROMOTE_RIGHT: HashMap<char, char> = maplit::hashmap! {
+    'i' => 'b',
+    'j' => 'c',
+    'k' => 'd',
+    'l' => 'e',
+    'm' => 'f',
+    'n' => 'g',
+    'o' => 'h',
+    'W' => '5',
+    'X' => '6',
+    'Y' => '7',
+    'Z' => '8',
+    '0' => '9',
+    '1' => '!',
+    '2' => '?',
+  };
+  static ref PROMOTION_DIR: HashMap<char, &'static HashMap<char, char>> = maplit::hashmap! {
+    '~' => &*PROMOTE_STRAIGHT,
+    '^' => &*PROMOTE_STRAIGHT,
+    '_' => &*PROMOTE_STRAIGHT,
+    '#' => &*PROMOTE_STRAIGHT,
+    '(' => &*PROMOTE_LEFT,
+    '{' => &*PROMOTE_LEFT,
+    '[' => &*PROMOTE_LEFT,
+    '@' => &*PROMOTE_LEFT,
+    '}' => &*PROMOTE_RIGHT,
+    ')' => &*PROMOTE_RIGHT,
+    ']' => &*PROMOTE_RIGHT,
+    '$' => &*PROMOTE_RIGHT,
+  };
+  static ref PROMOTION_TYPE: HashMap<char, PieceType> = maplit::hashmap! {
+    '~' => PieceType::Queen,
+    '^' => PieceType::Knight,
+    '_' => PieceType::Rook,
+    '#' => PieceType::Bishop,
+    '(' => PieceType::Knight,
+    '{' => PieceType::Queen,
+    '[' => PieceType::Rook,
+    '@' => PieceType::Bishop,
+    '}' => PieceType::Queen,
+    ')' => PieceType::Knight,
+    ']' => PieceType::Rook,
+    '$' => PieceType::Bishop,
+  };
+  static ref EN_PASSANT_MOVES: HashMap<(char, char), (PieceType, char, char)> = maplit::hashmap! {
+    ('y', 'r') => (PieceType::Pawn, 'j', 'z'),
+    ('z', 's') => (PieceType::Pawn, 'k', 'A'),
+    ('A', 't') => (PieceType::Pawn, 'l', 'B'),
+    ('B', 'u') => (PieceType::Pawn, 'm', 'C'),
+    ('C', 'v') => (PieceType::Pawn, 'n', 'D'),
+    ('D', 'w') => (PieceType::Pawn, 'o', 'E'),
+    ('E', 'x') => (PieceType::Pawn, 'p', 'F'),
+
+    ('z', 'q') => (PieceType::Pawn, 'i', 'y'),
+    ('A', 'r') => (PieceType::Pawn, 'j', 'z'),
+    ('B', 's') => (PieceType::Pawn, 'k', 'A'),
+    ('C', 't') => (PieceType::Pawn, 'l', 'B'),
+    ('D', 'u') => (PieceType::Pawn, 'm', 'C'),
+    ('E', 'x') => (PieceType::Pawn, 'n', 'D'),
+    ('F', 'w') => (PieceType::Pawn, 'o', 'E'),
+
+    ('H', 'O') => (PieceType::Pawn, 'W', 'G'),
+    ('I', 'P') => (PieceType::Pawn, 'X', 'H'),
+    ('J', 'Q') => (PieceType::Pawn, 'Y', 'I'),
+    ('K', 'R') => (PieceType::Pawn, 'Z', 'J'),
+    ('L', 'S') => (PieceType::Pawn, '0', 'K'),
+    ('M', 'T') => (PieceType::Pawn, '1', 'L'),
+    ('N', 'U') => (PieceType::Pawn, '2', 'M'),
+
+    ('G', 'P') => (PieceType::Pawn, 'X', 'H'),
+    ('H', 'Q') => (PieceType::Pawn, 'Y', 'I'),
+    ('I', 'R') => (PieceType::Pawn, 'Z', 'J'),
+    ('J', 'S') => (PieceType::Pawn, '0', 'K'),
+    ('K', 'T') => (PieceType::Pawn, '1', 'L'),
+    ('L', 'U') => (PieceType::Pawn, '2', 'M'),
+    ('M', 'V') => (PieceType::Pawn, '3', 'N'),
+  };
 }
 
 impl std::fmt::Display for PieceScore {
@@ -404,5 +591,71 @@ TM
     };
     let score = score_game(&game_9695070671);
     assert!(matches!(score, Ok(_)), "score_game returned {:?}", score);
+    let score = score.unwrap();
+    assert_eq!(
+      Some(&1),
+      score.scores.get(&Piece::new(PieceType::Pawn, Color::White, File::B))
+    );
+    assert_eq!(
+      Some(&1),
+      score.scores.get(&Piece::new(PieceType::Pawn, Color::White, File::D))
+    );
+    assert_eq!(
+      Some(&1),
+      score.scores.get(&Piece::new(PieceType::Pawn, Color::White, File::E))
+    );
+    assert_eq!(
+      Some(&1),
+      score.scores.get(&Piece::new(PieceType::Bishop, Color::White, File::F))
+    );
+    assert_eq!(
+      Some(&3),
+      score.scores.get(&Piece::new(PieceType::Knight, Color::White, File::B))
+    );
+    assert_eq!(
+      Some(&6),
+      score.scores.get(&Piece::new(PieceType::Knight, Color::White, File::G))
+    );
+    assert_eq!(
+      Some(&1),
+      score.scores.get(&Piece::new(PieceType::Rook, Color::White, File::A))
+    );
+    assert_eq!(
+      Some(&3),
+      score.scores.get(&Piece::new(PieceType::Queen, Color::White, File::D))
+    );
+    assert_eq!(
+      Some(&21),
+      score.scores.get(&Piece::new(PieceType::King, Color::White, File::E))
+    );
+
+    assert_eq!(
+      Some(&1),
+      score.scores.get(&Piece::new(PieceType::Bishop, Color::Black, File::C))
+    );
+    assert_eq!(
+      Some(&1),
+      score.scores.get(&Piece::new(PieceType::Bishop, Color::Black, File::F))
+    );
+    assert_eq!(
+      Some(&1),
+      score.scores.get(&Piece::new(PieceType::Knight, Color::Black, File::B))
+    );
+    assert_eq!(
+      Some(&12),
+      score.scores.get(&Piece::new(PieceType::Knight, Color::Black, File::G))
+    );
+    assert_eq!(
+      Some(&3),
+      score.scores.get(&Piece::new(PieceType::Rook, Color::Black, File::H))
+    );
+    assert_eq!(
+      Some(&5),
+      score.scores.get(&Piece::new(PieceType::Queen, Color::Black, File::D))
+    );
+    assert_eq!(
+      Some(&0),
+      score.scores.get(&Piece::new(PieceType::King, Color::Black, File::E))
+    );
   }
 }

@@ -80,6 +80,8 @@ async fn main() -> anyhow::Result<()> {
     // moveList parsing:
     // https://github.com/andyruwruw/chess-web-api/issues/10#issuecomment-779735204
     // Calculate which pieces capture how many points
+    // Promotion info:
+    // https://github.com/andyruwruw/chess-web-api/issues/11#issuecomment-783687021
     let score = analysis::score_game(&res.game)?;
     // Print output
     println!("{}", score);
