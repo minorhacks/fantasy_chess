@@ -1,0 +1,13 @@
+{
+    "player_id": 31513926,
+    "@id": "https://api.chess.com/pub/player/bminor13",
+    "url": "https://www.chess.com/member/bminor13",
+    "name": "Scott",
+    "username": "bminor13",
+    "followers": 7,
+    "country": "https://api.chess.com/pub/country/US",
+    "last_online": 1616564664,
+    "joined": 1481335321,
+    "status": "premium",
+    "is_streamer": false
+}

@@ -49,8 +49,6 @@ extern crate serde_json;
 extern crate thiserror;
 extern crate tokio;
 
-use std::time::Duration;
-
 use fantasy_chess::analysis;
 use fantasy_chess::api;
 use futures::StreamExt;
