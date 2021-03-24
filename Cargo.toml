@@ -9,6 +9,7 @@ version = "0.1.0"
 [dependencies]
 anyhow = "1"
 clap = "2"
+futures = "0.3"
 lazy_static = "1"
 maplit = "1"
 reqwest = "0.11"

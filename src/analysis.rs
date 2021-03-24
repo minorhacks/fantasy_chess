@@ -58,7 +58,7 @@ enum Color {
 }
 
 #[derive(Hash, Eq, PartialEq, Clone)]
-struct Piece {
+pub struct Piece {
   piece_type: PieceType,
   color: Color,
   file: File,
@@ -474,6 +474,24 @@ pub fn score_game(game: &api::Game) -> Result<PieceScore, Error> {
       panic!();
     }
   }
+  Ok(final_score)
+}
+
+pub fn average_games(
+  games: &[api::Game],
+) -> Result<HashMap<Piece, f64>, Error> {
+  let mut final_score = HashMap::new();
+  let scores =
+    games.iter().map(|g| score_game(g)).collect::<Result<Vec<_>, Error>>()?;
+  for piece in &*WHITE_PIECES {
+    let average: f64 = scores
+      .iter()
+      .map(|s| *s.scores.get(&piece).or(Some(&0)).unwrap() as f64)
+      .sum::<f64>()
+      / scores.len() as f64;
+    final_score.insert(piece.clone(), average);
+  }
+
   Ok(final_score)
 }
 

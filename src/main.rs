@@ -42,14 +42,18 @@
 
 extern crate anyhow;
 extern crate clap;
+extern crate futures;
 extern crate maplit;
 extern crate reqwest;
 extern crate serde_json;
 extern crate thiserror;
 extern crate tokio;
 
+use std::time::Duration;
+
 use fantasy_chess::analysis;
 use fantasy_chess::api;
+use futures::StreamExt;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -62,9 +66,25 @@ async fn main() -> anyhow::Result<()> {
       clap::SubCommand::with_name("score_game")
         .about("scores an individual game by chess.com ID")
         .arg(
-          clap::Arg::with_name("chess.com ID")
+          clap::Arg::with_name("chess.com game ID")
             .help("ID of the game on chess.com")
             .required(true),
+        ),
+    )
+    .subcommand(
+      clap::SubCommand::with_name("score_player")
+        .about("scores and averages the last N games for a player by name")
+        .arg(
+          clap::Arg::with_name("chess.com username")
+            .help("Username of the player on chess.com")
+            .required(true),
+        )
+        .arg(
+          clap::Arg::with_name("num games")
+            .help("Number of games to analyze")
+            .short("n")
+            .long("num_games")
+            .takes_value(true),
         ),
     )
     .get_matches();
@@ -85,6 +105,33 @@ async fn main() -> anyhow::Result<()> {
     let score = analysis::score_game(&res.game)?;
     // Print output
     println!("{}", score);
+  } else if let Some(score_player_args) =
+    matches.subcommand_matches("score_player")
+  {
+    // Get the player's ID
+    let uri = format!(
+      "https://api.chess.com/pub/player/{}",
+      score_player_args.value_of("chess.com username").unwrap()
+    );
+    let body = reqwest::get(&uri).await?.text().await?;
+    let res: api::PlayerResponse = serde_json::from_str(&body)?;
+    // Look up their games
+    let uri = format!("https://www.chess.com/callback/user/daily/archive?all=1&locale=en_US&userId={}", res.player_id);
+    let body = reqwest::get(&uri).await?.text().await?;
+    let res: Vec<api::GameSummary> = serde_json::from_str(&body)?;
+    let fetches =
+      futures::stream::iter(res.into_iter().map(|summary| async move {
+        let uri =
+          format!("https://www.chess.com/callback/live/game/{}", summary.id);
+        let body = reqwest::get(&uri).await.unwrap().text().await.unwrap();
+        let res: api::GameResponse = serde_json::from_str(&body).unwrap();
+        res.game
+      }))
+      .buffer_unordered(3)
+      .collect::<Vec<api::Game>>()
+      .await;
+    println!("{:?}", analysis::average_games(&fetches)?);
+    // https://www.chess.com/callback/user/daily/archive?all=1&locale=en_US&userId=31513926
   } else {
     unimplemented!("command not implemented");
   }
