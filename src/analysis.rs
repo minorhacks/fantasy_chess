@@ -191,20 +191,26 @@ impl std::fmt::Debug for Piece {
   }
 }
 
+impl std::fmt::Display for PieceType {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let s = format!("{:?}", self);
+    Ok(write!(f, "{}", s.to_lowercase())?)
+  }
+}
+
+impl std::fmt::Display for File {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let s = format!("{:?}", self);
+    Ok(write!(f, "{}", s.to_lowercase())?)
+  }
+}
+
 impl std::fmt::Display for Piece {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     if f.alternate() {
-      write!(f, "{:?} ", self.color)?;
+      write!(f, "{} ", self.color)?;
     }
-    write!(f, "{:?}", self.piece_type)?;
-    match self.piece_type {
-      PieceType::Bishop
-      | PieceType::Knight
-      | PieceType::Rook
-      | PieceType::Pawn => write!(f, " {:?}", self.file)?,
-      _ => (),
-    }
-    Ok(())
+    Ok(write!(f, "{} {}", self.piece_type, self.file)?)
   }
 }
 
@@ -263,6 +269,7 @@ impl Board {
     start: char,
     end: char,
   ) -> Result<db::Move, Error> {
+    let move_num = self.move_num;
     self.move_num += 1;
     // Fetch the last move. On all exits to this function, set the last move as
     // this move for the next iteration. We need the last move to detect en
@@ -309,7 +316,7 @@ impl Board {
 
       return Ok(db::Move {
         game_id: String::from(game_id),
-        move_num: self.move_num,
+        move_num,
         color: moved_piece.color.to_string(),
         moved_piece: moved_piece.to_string(),
         starting_location: Square::from(start).to_string(),
@@ -395,7 +402,7 @@ impl Board {
     // Return the starting piece along with its score
     Ok(db::Move {
       game_id: String::from(game_id),
-      move_num: self.move_num,
+      move_num,
       color: moved_piece.color.to_string(),
       moved_piece: moved_piece.to_string(),
       starting_location: Square::from(start).to_string(),
