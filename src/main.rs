@@ -49,8 +49,8 @@ extern crate serde_json;
 extern crate thiserror;
 extern crate tokio;
 
-use fantasy_chess::analysis;
 use fantasy_chess::api;
+use fantasy_chess::{analysis, chess_com};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -75,24 +75,28 @@ async fn main() -> anyhow::Result<()> {
         .arg(
           clap::Arg::with_name("chess_com_game_id")
             .help("ID of the game on chess.com")
-            .long("chess_com_game_id"),
+            .long("chess_com_game_id")
+            .takes_value(true),
         )
         .arg(
           clap::Arg::with_name("lichess_game_id")
             .help("ID of the game on Lichess")
-            .long("lichess_game_id"),
+            .long("lichess_game_id")
+            .takes_value(true),
         )
         .arg(
           clap::Arg::with_name("sqlite_db_file")
             .help(
               "Path to sqlite DB file. Will be created if it doesn't exist.",
             )
-            .long("sqlite_db_file"),
+            .long("sqlite_db_file")
+            .takes_value(true),
         )
         .arg(
           clap::Arg::with_name("mysql_db")
             .help("MySQL DB connection string")
-            .long("mysql_db"),
+            .long("mysql_db")
+            .takes_value(true),
         ),
     )
     .subcommand(
@@ -125,12 +129,68 @@ async fn main() -> anyhow::Result<()> {
       // Print output
       println!("{}", score);
     }
-    ("ingest", Some(_ingest_args)) => {
-      todo!("implement ingest")
+    ("ingest", Some(ingest_args)) => {
+      // Open database
+      let db = connect_to_db(ingest_args)
+        .await
+        .expect("failed to connect to database");
+
+      // Parse game
+      let game = parse_game(ingest_args)
+        .await
+        .expect("failed to parse game")
+        .game()
+        .expect("failed to convert to db::Game");
+
+      // Insert db::Game into DB
+      let q = game.insert_query().execute(&db).await?;
+      println!("query result: {:?}", q);
+      // For each move
+      //   Insert db::Move into DB
     }
     _ => {
       unimplemented!("command not implemented")
     }
   }
   Ok(())
+}
+
+async fn connect_to_db(
+  args: &clap::ArgMatches<'_>,
+) -> sqlx::Result<sqlx::Pool<sqlx::Sqlite>> {
+  // If database arg is sqlite
+  if let Some(db_path) = args.value_of("sqlite_db_file") {
+    // Open connection to sqlite file
+    let connection_string = "sqlite://".to_owned() + db_path;
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+      .max_connections(5)
+      .connect(&connection_string)
+      .await?;
+    return Ok(pool);
+  } else if let Some(_connection_string) = args.value_of("mysql_db") {
+    // If database arg is mysql
+    //   Open connection to MySQL DB
+    unimplemented!("mysql support not yet implemented")
+  } else {
+    unimplemented!("unsupported database type")
+  }
+}
+
+async fn parse_game(
+  args: &clap::ArgMatches<'_>,
+) -> anyhow::Result<Box<dyn fantasy_chess::db::Recordable>> {
+  // If game ID arg is chess.com ID
+  if let Some(chess_com_id) = args.value_of("chess_com_game_id") {
+    // Parse game info to db::Game
+    let uri =
+      format!("https://www.chess.com/callback/live/game/{}", chess_com_id);
+    let body = reqwest::get(&uri).await?.text().await?;
+    let res: chess_com::GameResponse = serde_json::from_str(&body)?;
+    return Ok(Box::new(res));
+    // Parse moves to db::Moves iter
+  }
+  // If game ID arg is lichess ID
+  //   Parse game info to db::Game
+  //   Parse moves to db::Moves iter
+  todo!()
 }

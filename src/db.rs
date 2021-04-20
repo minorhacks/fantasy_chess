@@ -1,3 +1,14 @@
+use thiserror::Error as ThisError;
+
+#[derive(ThisError, Debug)]
+pub enum Error {
+  #[error("failed to translate game")]
+  GameTranslation,
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
 pub struct Move {
   game_id: String,
   move_num: i32,
@@ -9,22 +20,31 @@ pub struct Move {
   capture_score: i32,
 }
 
+#[derive(Debug)]
 pub struct Game {
-  site: String,
-  id: String,
-  start_time: u32,
-  white_player_id: String,
-  white_player_name: String,
-  white_player_rating: i32,
-  black_player_id: String,
-  black_player_name: String,
-  black_player_rating: i32,
+  pub site: String,
+  pub id: String,
+  pub start_time: u32,
+  pub white_player_id: String,
+  pub white_player_name: String,
+  pub white_player_rating: i32,
+  pub black_player_id: String,
+  pub black_player_name: String,
+  pub black_player_rating: i32,
+}
+
+pub trait Recordable: std::fmt::Debug {
+  fn game(&self) -> Result<Game>;
 }
 
 impl Move {
   pub fn insert_query(
     self,
-  ) -> sqlx::query::Query<'static, sqlx::MySql, sqlx::mysql::MySqlArguments> {
+  ) -> sqlx::query::Query<
+    'static,
+    sqlx::Sqlite,
+    sqlx::sqlite::SqliteArguments<'static>,
+  > {
     sqlx::query("INSERT INTO Moves (game_id, move_num, color,
             moved_piece, starting_location, ending_location, captured_piece, capture_score) 
             VALUES (? ? ? ? ? ? ? ?)")
@@ -42,12 +62,16 @@ impl Move {
 impl Game {
   pub fn insert_query(
     self,
-  ) -> sqlx::query::Query<'static, sqlx::MySql, sqlx::mysql::MySqlArguments> {
+  ) -> sqlx::query::Query<
+    'static,
+    sqlx::Sqlite,
+    sqlx::sqlite::SqliteArguments<'static>,
+  > {
     sqlx::query(
       "INSERT INTO Games (site, id, start_time,
         white_player_id, white_player_name, white_player_rating,
         black_player_id, black_player_name, black_player_rating) 
-        VALUES (? ? ? ? ? ? ? ? ?)",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(self.site)
     .bind(self.id)
@@ -58,13 +82,5 @@ impl Game {
     .bind(self.black_player_id)
     .bind(self.black_player_name)
     .bind(self.black_player_rating)
-  }
-}
-
-struct Sqlite;
-
-impl Sqlite {
-  fn open(filename: &std::path::Path) -> Sqlite {
-    unimplemented!()
   }
 }
