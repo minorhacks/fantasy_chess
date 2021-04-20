@@ -1,23 +1,29 @@
+use crate::analysis;
 use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug)]
 pub enum Error {
   #[error("failed to translate game")]
   GameTranslation,
+  #[error("failed to translate move")]
+  MoveTranslation {
+    #[from]
+    source: analysis::Error,
+  },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub struct Move {
-  game_id: String,
-  move_num: i32,
-  color: String,
-  moved_piece: String,
-  starting_location: String,
-  ending_location: String,
-  captured_piece: String,
-  capture_score: i32,
+  pub game_id: String,
+  pub move_num: i32,
+  pub color: String,
+  pub moved_piece: String,
+  pub starting_location: String,
+  pub ending_location: String,
+  pub captured_piece: String,
+  pub capture_score: i32,
 }
 
 #[derive(Debug)]
@@ -35,7 +41,7 @@ pub struct Game {
 
 pub trait Recordable {
   fn game(&self) -> Result<Game>;
-  fn moves(&self) -> Result<Vec<Move>>;
+  fn moves(&self, game_id: &str) -> Result<Vec<Move>>;
 }
 
 impl Move {
@@ -45,7 +51,8 @@ impl Move {
   {
     sqlx::query("INSERT INTO Moves (game_id, move_num, color,
             moved_piece, starting_location, ending_location, captured_piece, capture_score) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(game_id, move_num, color) DO NOTHING")
             .bind(self.game_id)
             .bind(self.move_num)
             .bind(self.color)

@@ -1,3 +1,4 @@
+use crate::analysis;
 use crate::db;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -49,7 +50,19 @@ impl db::Recordable for GameResponse {
     })
   }
 
-  fn moves(&self) -> db::Result<Vec<db::Move>> {
-    todo!()
+  fn moves(&self, game_id: &str) -> db::Result<Vec<db::Move>> {
+    let mut board = analysis::Board::starting();
+    let mut move_list = self.game.move_list.chars().fuse();
+    let mut parsed_moves = Vec::new();
+
+    while let Some(start) = move_list.next() {
+      if let Some(end) = move_list.next() {
+        let m = board.make_move(game_id, start, end)?;
+        parsed_moves.push(m);
+      } else {
+        return Err(db::Error::GameTranslation);
+      }
+    }
+    Ok(parsed_moves)
   }
 }

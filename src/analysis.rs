@@ -5,6 +5,7 @@ extern crate thiserror;
 extern crate tokio;
 
 use crate::api;
+use crate::db;
 use std::collections::HashMap;
 use thiserror::Error as ThisError;
 
@@ -27,7 +28,7 @@ enum PieceType {
 }
 
 impl PieceType {
-  fn value(&self) -> u32 {
+  fn value(&self) -> i32 {
     match self {
       PieceType::King => 0, // TODO: what should be the value of checkmate?
       PieceType::Queen => 9,
@@ -57,12 +58,107 @@ enum Color {
   Black,
 }
 
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+struct Square(char);
+
+impl std::fmt::Display for Square {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let s = match self.0 {
+      'a' => "a1",
+      'b' => "b1",
+      'c' => "c1",
+      'd' => "d1",
+      'e' => "e1",
+      'f' => "f1",
+      'g' => "g1",
+      'h' => "h1",
+      'i' => "a2",
+      'j' => "b2",
+      'k' => "c2",
+      'l' => "d2",
+      'm' => "e2",
+      'n' => "f2",
+      'o' => "g2",
+      'p' => "h2",
+      'q' => "a3",
+      'r' => "b3",
+      's' => "c3",
+      't' => "d3",
+      'u' => "e3",
+      'v' => "f3",
+      'w' => "g3",
+      'x' => "h3",
+      'y' => "a4",
+      'z' => "b4",
+      'A' => "c4",
+      'B' => "d4",
+      'C' => "e4",
+      'D' => "f4",
+      'E' => "g4",
+      'F' => "h4",
+      'G' => "a5",
+      'H' => "b5",
+      'I' => "c5",
+      'J' => "d5",
+      'K' => "e5",
+      'L' => "f5",
+      'M' => "g5",
+      'N' => "h5",
+      'O' => "a6",
+      'P' => "b6",
+      'Q' => "c6",
+      'R' => "d6",
+      'S' => "e6",
+      'T' => "f6",
+      'U' => "g6",
+      'V' => "h6",
+      'W' => "a7",
+      'X' => "b7",
+      'Y' => "c7",
+      'Z' => "d7",
+      '0' => "e7",
+      '1' => "f7",
+      '2' => "g7",
+      '3' => "h7",
+      '4' => "a8",
+      '5' => "b8",
+      '6' => "c8",
+      '7' => "d8",
+      '8' => "e8",
+      '9' => "f8",
+      '!' => "g8",
+      '?' => "h8",
+      c => unreachable!(format!("unrecognized board char: {}", c)),
+    };
+    Ok(write!(f, "{}", s)?)
+  }
+}
+
+impl From<char> for Square {
+  fn from(c: char) -> Self {
+    Square(c)
+  }
+}
+
+impl std::fmt::Display for Color {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    Ok(write!(
+      f,
+      "{}",
+      match self {
+        Color::White => "white",
+        Color::Black => "black",
+      }
+    )?)
+  }
+}
+
 #[derive(Hash, Eq, PartialEq, Clone)]
 pub struct Piece {
   piece_type: PieceType,
   color: Color,
   file: File,
-  promoted_value: Option<u32>,
+  promoted_value: Option<i32>,
 }
 
 impl Piece {
@@ -75,7 +171,7 @@ impl Piece {
     self
   }
 
-  fn value(&self) -> u32 {
+  fn value(&self) -> i32 {
     // Piece defers to the value of its type, unless it's been promoted, in
     // which case the value is overridden in promoted_value.
     self.promoted_value.unwrap_or_else(|| self.piece_type.value())
@@ -113,13 +209,14 @@ impl std::fmt::Display for Piece {
   }
 }
 
-struct Board {
+pub struct Board {
   piece_map: HashMap<char, Piece>,
   last_move: Option<(PieceType, char, char)>,
+  move_num: i32,
 }
 
 impl Board {
-  fn starting() -> Board {
+  pub fn starting() -> Board {
     Board {
       piece_map: maplit::hashmap! {
           'a' => Piece::new(PieceType::Rook, Color::White, File::A),
@@ -157,14 +254,165 @@ impl Board {
           '3' => Piece::new(PieceType::Pawn, Color::Black, File::H),
       },
       last_move: None,
+      move_num: 0,
     }
+  }
+
+  pub fn make_move(
+    &mut self,
+    game_id: &str,
+    start: char,
+    end: char,
+  ) -> Result<db::Move, Error> {
+    self.move_num += 1;
+    // Fetch the last move. On all exits to this function, set the last move as
+    // this move for the next iteration. We need the last move to detect en
+    // passant situations.
+    let last_move = std::mem::take(&mut self.last_move);
+
+    // Get the piece at the start location
+    let (_loc, moved_piece) =
+      self.piece_map.remove_entry(&start).ok_or(Error::PieceNotFound(start))?;
+
+    // Promotion is handled here by looking at the end move; if it is a
+    // promotion move, it will have a special character that doesn't correspond
+    // to any square on the board. From this char, we can deduce:
+    // * the promotion square, which is calculated based on the promotion
+    //   direction and the starting square
+    // * the piece type that this piece is promoted to
+    // We use the promotion piece type to set the value of the piece, without
+    // changing the definition of the piece itself. So Pawn on Rank A will
+    // always be Pawn on Rank A (so we have continuity in our points tracking),
+    // but if it gets promoted to a queen on the board then its capture will be
+    // worth 9.
+    if let Some(&next_square_lookup) = PROMOTION_DIR.get(&end) {
+      let promotion = PROMOTION_TYPE.get(&end).unwrap_or_else(|| {
+        unreachable!(
+          "encoded promotion '{}' has no corresponding piece type",
+          end
+        )
+      });
+      let end = next_square_lookup.get(&start).unwrap_or_else(|| {
+        unreachable!(
+          "piece on encoded square {} has no promotion square",
+          start
+        )
+      });
+      let captured_piece = self.piece_map.get(&end).cloned();
+      let score = captured_piece
+        .as_ref()
+        .map(|captured_piece| captured_piece.value())
+        .unwrap_or(0);
+      self
+        .piece_map
+        .insert(*end, moved_piece.clone().with_promotion(promotion));
+      self.last_move = Some((moved_piece.piece_type.clone(), start, *end));
+
+      return Ok(db::Move {
+        game_id: String::from(game_id),
+        move_num: self.move_num,
+        color: moved_piece.color.to_string(),
+        moved_piece: moved_piece.to_string(),
+        starting_location: Square::from(start).to_string(),
+        ending_location: Square::from(*end).to_string(),
+        captured_piece: captured_piece
+          .map(|p| p.to_string())
+          .unwrap_or_else(|| "".into()),
+        capture_score: score,
+      });
+    }
+
+    // Handle regular (non-promotion) moves
+    // Get the piece at the end location; if there is one, the score is the
+    // value of the piece.
+    // If this is an en-passant capture, this calculation will be zero but will
+    // be updated below.
+    let mut captured_piece = self.piece_map.get(&end).cloned();
+
+    // Handle en passant
+    // If the last move was a pawn double-move and this move is a pawn capture
+    // corresponding to that particular pawn double-move, then this was an en
+    // passant capture. The piece moved last move is removed from the board, and
+    // the piece moved this turn scores points.
+    if let Some(last_move) = last_move {
+      if EN_PASSANT_MOVES
+        .get(&(start, end))
+        .map(|f| f.0 == last_move.0 && f.1 == last_move.1 && f.2 == last_move.2)
+        == Some(true)
+      {
+        println!("EN PASSANT");
+        // Remove the piece on the last move's end square
+        captured_piece = Some(
+          self
+            .piece_map
+            .remove(&last_move.2)
+            .ok_or(Error::EnPassantPieceNotFound(last_move.2))?,
+        );
+        // Adjust the score for this move's piece based on last move
+      }
+    }
+    let score = captured_piece.as_ref().map(|p| p.value()).unwrap_or(0);
+
+    // Castling is handled here by seeing if we see the king jump 2 squares
+    // in one of the possible castling scenarios. If this happens, we need
+    // to be sure to update the rook as well, as its movement is implied;
+    // failure to do so means that the rook won't be found at its expected
+    // square when its moved later.
+    match (moved_piece.clone(), start, end) {
+      // White kingside castle
+      (Piece { piece_type: PieceType::King, .. }, 'e', 'g') => {
+        self.piece_map.insert(end, moved_piece.clone());
+        let (_, rook) =
+          self.piece_map.remove_entry(&'h').ok_or(Error::PieceNotFound('h'))?;
+        self.piece_map.insert('f', rook);
+      }
+      // White queenside castle
+      (Piece { piece_type: PieceType::King, .. }, 'e', 'c') => {
+        self.piece_map.insert(end, moved_piece.clone());
+        let (_, rook) =
+          self.piece_map.remove_entry(&'a').ok_or(Error::PieceNotFound('a'))?;
+        self.piece_map.insert('d', rook);
+      }
+      // Black kingside castle
+      (Piece { piece_type: PieceType::King, .. }, '8', '!') => {
+        self.piece_map.insert(end, moved_piece.clone());
+        let (_, rook) =
+          self.piece_map.remove_entry(&'?').ok_or(Error::PieceNotFound('?'))?;
+        self.piece_map.insert('9', rook);
+      }
+      // Black queenside castle
+      (Piece { piece_type: PieceType::King, .. }, '8', '6') => {
+        self.piece_map.insert(end, moved_piece.clone());
+        let (_, rook) =
+          self.piece_map.remove_entry(&'4').ok_or(Error::PieceNotFound('4'))?;
+        self.piece_map.insert('7', rook);
+      }
+      // Normal move
+      _ => {
+        self.piece_map.insert(end, moved_piece.clone());
+      }
+    }
+    self.last_move = Some((moved_piece.piece_type.clone(), start, end));
+    // Return the starting piece along with its score
+    Ok(db::Move {
+      game_id: String::from(game_id),
+      move_num: self.move_num,
+      color: moved_piece.color.to_string(),
+      moved_piece: moved_piece.to_string(),
+      starting_location: Square::from(start).to_string(),
+      ending_location: Square::from(end).to_string(),
+      captured_piece: captured_piece
+        .map(|p| p.to_string())
+        .unwrap_or_else(|| "".into()),
+      capture_score: score,
+    })
   }
 
   fn move_and_score(
     &mut self,
     start: char,
     end: char,
-  ) -> Result<(Piece, u32), Error> {
+  ) -> Result<(Piece, i32), Error> {
     // Fetch the last move. On all exits to this function, set the last move as
     // this move for the next iteration. We need the last move to detect en
     // passant situations.
@@ -290,7 +538,7 @@ impl Board {
 
 #[derive(Debug)]
 pub struct PieceScore {
-  scores: HashMap<Piece, u32>,
+  scores: HashMap<Piece, i32>,
 }
 
 lazy_static! {

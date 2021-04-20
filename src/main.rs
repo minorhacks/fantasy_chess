@@ -136,13 +136,14 @@ async fn main() -> anyhow::Result<()> {
       // Parse game
       let game = parse_game(ingest_args).await?;
       let db_game = game.game()?;
+      let game_id = db_game.id.clone();
 
       // Insert db::Game into DB
       let q = db_game.insert_query().execute(&db).await?;
       println!("query result: {:?}", q);
 
       // For each move
-      let db_moves = game.moves()?;
+      let db_moves = game.moves(&game_id)?;
       for m in db_moves {
         // Insert db::Move into DB
         m.insert_query().execute(&db).await?;
