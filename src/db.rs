@@ -22,9 +22,9 @@ pub struct Move {
 
 #[derive(Debug)]
 pub struct Game {
-  pub site: String,
+  pub source: String,
   pub id: String,
-  pub start_time: u32,
+  pub end_time: i64,
   pub white_player_id: String,
   pub white_player_name: String,
   pub white_player_rating: i32,
@@ -33,21 +33,19 @@ pub struct Game {
   pub black_player_rating: i32,
 }
 
-pub trait Recordable: std::fmt::Debug {
+pub trait Recordable {
   fn game(&self) -> Result<Game>;
+  fn moves(&self) -> Result<Vec<Move>>;
 }
 
 impl Move {
   pub fn insert_query(
     self,
-  ) -> sqlx::query::Query<
-    'static,
-    sqlx::Sqlite,
-    sqlx::sqlite::SqliteArguments<'static>,
-  > {
+  ) -> sqlx::query::Query<'static, sqlx::Any, sqlx::any::AnyArguments<'static>>
+  {
     sqlx::query("INSERT INTO Moves (game_id, move_num, color,
             moved_piece, starting_location, ending_location, captured_piece, capture_score) 
-            VALUES (? ? ? ? ? ? ? ?)")
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(self.game_id)
             .bind(self.move_num)
             .bind(self.color)
@@ -62,20 +60,18 @@ impl Move {
 impl Game {
   pub fn insert_query(
     self,
-  ) -> sqlx::query::Query<
-    'static,
-    sqlx::Sqlite,
-    sqlx::sqlite::SqliteArguments<'static>,
-  > {
+  ) -> sqlx::query::Query<'static, sqlx::Any, sqlx::any::AnyArguments<'static>>
+  {
     sqlx::query(
-      "INSERT INTO Games (site, id, start_time,
+      "INSERT INTO Games (source, id, end_time,
         white_player_id, white_player_name, white_player_rating,
         black_player_id, black_player_name, black_player_rating) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(source, id) DO NOTHING",
     )
-    .bind(self.site)
+    .bind(self.source)
     .bind(self.id)
-    .bind(self.start_time)
+    .bind(self.end_time)
     .bind(self.white_player_id)
     .bind(self.white_player_name)
     .bind(self.white_player_rating)

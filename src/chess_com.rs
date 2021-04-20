@@ -10,7 +10,7 @@ pub struct GameResponse {
 pub struct Game {
   id: u64,
   #[serde(rename = "endTime")]
-  pub end_time: u32,
+  pub end_time: i64,
   #[serde(rename = "moveList")]
   pub move_list: String,
 }
@@ -37,9 +37,9 @@ impl db::Recordable for GameResponse {
       _ => return Err(db::Error::GameTranslation),
     };
     Ok(db::Game {
-      site: "chess.com".to_owned(),
+      source: "chess.com".to_owned(),
       id: self.game.id.to_string(),
-      start_time: self.game.end_time,
+      end_time: self.game.end_time,
       white_player_id: white_player.id.to_string(),
       white_player_name: white_player.username.clone(),
       white_player_rating: white_player.rating,
@@ -47,5 +47,9 @@ impl db::Recordable for GameResponse {
       black_player_name: black_player.username.clone(),
       black_player_rating: black_player.rating,
     })
+  }
+
+  fn moves(&self) -> db::Result<Vec<db::Move>> {
+    todo!()
   }
 }

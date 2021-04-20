@@ -131,22 +131,22 @@ async fn main() -> anyhow::Result<()> {
     }
     ("ingest", Some(ingest_args)) => {
       // Open database
-      let db = connect_to_db(ingest_args)
-        .await
-        .expect("failed to connect to database");
+      let db = connect_to_db(ingest_args).await?;
 
       // Parse game
-      let game = parse_game(ingest_args)
-        .await
-        .expect("failed to parse game")
-        .game()
-        .expect("failed to convert to db::Game");
+      let game = parse_game(ingest_args).await?;
+      let db_game = game.game()?;
 
       // Insert db::Game into DB
-      let q = game.insert_query().execute(&db).await?;
+      let q = db_game.insert_query().execute(&db).await?;
       println!("query result: {:?}", q);
+
       // For each move
-      //   Insert db::Move into DB
+      let db_moves = game.moves()?;
+      for m in db_moves {
+        // Insert db::Move into DB
+        m.insert_query().execute(&db).await?;
+      }
     }
     _ => {
       unimplemented!("command not implemented")
@@ -157,12 +157,13 @@ async fn main() -> anyhow::Result<()> {
 
 async fn connect_to_db(
   args: &clap::ArgMatches<'_>,
-) -> sqlx::Result<sqlx::Pool<sqlx::Sqlite>> {
+) -> sqlx::Result<sqlx::Pool<sqlx::Any>> {
   // If database arg is sqlite
   if let Some(db_path) = args.value_of("sqlite_db_file") {
     // Open connection to sqlite file
     let connection_string = "sqlite://".to_owned() + db_path;
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+    //let pool = sqlx::sqlite::SqlitePoolOptions::new()
+    let pool = sqlx::any::AnyPoolOptions::new()
       .max_connections(5)
       .connect(&connection_string)
       .await?;
