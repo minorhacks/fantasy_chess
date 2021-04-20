@@ -1,6 +1,7 @@
 extern crate anyhow;
 extern crate clap;
 extern crate futures;
+extern crate itertools;
 extern crate maplit;
 extern crate reqwest;
 extern crate serde_json;
@@ -8,10 +9,10 @@ extern crate thiserror;
 extern crate tokio;
 
 use fantasy_chess::chess_com;
+use fantasy_chess::pgn;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-  // Parse arguments
   let matches = clap::App::new("fantasy_chess")
     .version("0.1.0")
     .author("Scott Minor <minor@minorhacks.com>")
@@ -21,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
         .about("pull game(s) and ingest into a database")
         .group(
           clap::ArgGroup::with_name("source")
-            .args(&["chess_com_game_id", "lichess_game_id"])
+            .args(&["chess_com_game_id", "pgn_file"])
             .required(true),
         )
         .group(
@@ -36,9 +37,9 @@ async fn main() -> anyhow::Result<()> {
             .takes_value(true),
         )
         .arg(
-          clap::Arg::with_name("lichess_game_id")
-            .help("ID of the game on Lichess")
-            .long("lichess_game_id")
+          clap::Arg::with_name("pgn_file")
+            .help("Path to PGN game database")
+            .long("pgn_file")
             .takes_value(true),
         )
         .arg(
@@ -60,22 +61,16 @@ async fn main() -> anyhow::Result<()> {
 
   match matches.subcommand() {
     ("ingest", Some(ingest_args)) => {
-      // Open database
       let db = connect_to_db(ingest_args).await?;
 
-      // Parse game
       let game = parse_game(ingest_args).await?;
       let db_game = game.game()?;
       let game_id = db_game.id.clone();
 
-      // Insert db::Game into DB
       let q = db_game.insert_query().execute(&db).await?;
-      println!("game insert: {:?}", q);
 
-      // For each move
       let db_moves = game.moves()?;
       for m in db_moves {
-        // Insert db::Move into DB
         m.insert_query(game_id.clone()).execute(&db).await?;
       }
     }
@@ -117,6 +112,13 @@ async fn parse_game(
     let body = reqwest::get(&uri).await?.text().await?;
     let res: chess_com::GameResponse = serde_json::from_str(&body)?;
     return Ok(Box::new(res));
+  } else if let Some(pgn_filename) = args.value_of("pgn_file") {
+    let f = std::fs::File::open(pgn_filename)?;
+    let scanner = pgn::PgnSplitter::new(f);
+    //for (i, f) in scanner.enumerate() {
+    //  println!("+++++ PGN {} +++++\n{}", i, f);
+    //}
+    println!("PGN count: {}", scanner.count());
   }
-  todo!()
+  unimplemented!()
 }
