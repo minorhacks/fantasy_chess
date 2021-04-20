@@ -1,4 +1,3 @@
-pub mod analysis;
 pub mod chess_com;
 pub mod db;
 
