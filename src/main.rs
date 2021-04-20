@@ -1,45 +1,3 @@
-// Analyzes a single chess match by ID, as retrieved from chess.com
-// Usage:
-//   fantasy_chess score_game <chess.com ID>
-//
-// Output:
-//
-//   White:
-//     king - 1
-//     queen - 1
-//     rook_a - 1
-//     rook_h - 1
-//     knight_b - 1
-//     knight_g - 1
-//     bishop_c - 1
-//     bishop_f - 1
-//     pawn_a - 1
-//     pawn_b - 1
-//     pawn_c - 1
-//     pawn_d - 1
-//     pawn_e - 1
-//     pawn_f - 1
-//     pawn_g - 1
-//     pawn_h - 1
-//
-//   Black:
-//     king - 1
-//     queen - 1
-//     rook_a - 1
-//     rook_h - 1
-//     knight_b - 1
-//     knight_g - 1
-//     bishop_c - 1
-//     bishop_f - 1
-//     pawn_a - 1
-//     pawn_b - 1
-//     pawn_c - 1
-//     pawn_d - 1
-//     pawn_e - 1
-//     pawn_f - 1
-//     pawn_g - 1
-//     pawn_h - 1
-
 extern crate anyhow;
 extern crate clap;
 extern crate futures;
@@ -49,8 +7,7 @@ extern crate serde_json;
 extern crate thiserror;
 extern crate tokio;
 
-use fantasy_chess::api;
-use fantasy_chess::{analysis, chess_com};
+use fantasy_chess::chess_com;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -99,36 +56,9 @@ async fn main() -> anyhow::Result<()> {
             .takes_value(true),
         ),
     )
-    .subcommand(
-      clap::SubCommand::with_name("score_game")
-        .about("scores an individual game by chess.com ID")
-        .arg(
-          clap::Arg::with_name("chess.com game ID")
-            .help("ID of the game on chess.com")
-            .required(true),
-        ),
-    )
     .get_matches();
 
   match matches.subcommand() {
-    ("score_game", Some(score_game_args)) => {
-      // Fetch chess game by ID from chess.com
-      let chess_id = score_game_args.value_of("chess.com ID").unwrap();
-      let uri =
-        format!("https://www.chess.com/callback/live/game/{}", chess_id);
-      let body = reqwest::get(&uri).await?.text().await?;
-      let res: api::GameResponse = serde_json::from_str(&body)?;
-      // API documentation:
-      // https://github.com/andyruwruw/chess-web-api/blob/master/documentation/GAME.md
-      // moveList parsing:
-      // https://github.com/andyruwruw/chess-web-api/issues/10#issuecomment-779735204
-      // Calculate which pieces capture how many points
-      // Promotion info:
-      // https://github.com/andyruwruw/chess-web-api/issues/11#issuecomment-783687021
-      let score = analysis::score_game(&res.game)?;
-      // Print output
-      println!("{}", score);
-    }
     ("ingest", Some(ingest_args)) => {
       // Open database
       let db = connect_to_db(ingest_args).await?;
@@ -181,18 +111,12 @@ async fn connect_to_db(
 async fn parse_game(
   args: &clap::ArgMatches<'_>,
 ) -> anyhow::Result<Box<dyn fantasy_chess::db::Recordable>> {
-  // If game ID arg is chess.com ID
   if let Some(chess_com_id) = args.value_of("chess_com_game_id") {
-    // Parse game info to db::Game
     let uri =
       format!("https://www.chess.com/callback/live/game/{}", chess_com_id);
     let body = reqwest::get(&uri).await?.text().await?;
     let res: chess_com::GameResponse = serde_json::from_str(&body)?;
     return Ok(Box::new(res));
-    // Parse moves to db::Moves iter
   }
-  // If game ID arg is lichess ID
-  //   Parse game info to db::Game
-  //   Parse moves to db::Moves iter
   todo!()
 }
