@@ -1,6 +1,10 @@
 use crate::analysis;
 use crate::db;
 
+// =============================================================================
+// API Types
+// =============================================================================
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct GameResponse {
   pub game: Game,
@@ -66,3 +70,7 @@ impl db::Recordable for GameResponse {
     Ok(parsed_moves)
   }
 }
+
+// =============================================================================
+// Junk to help replay games
+// =============================================================================

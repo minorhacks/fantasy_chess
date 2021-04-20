@@ -17,41 +17,6 @@ pub enum Error {
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
-enum PieceType {
-  King,
-  Queen,
-  Bishop,
-  Knight,
-  Rook,
-  Pawn,
-}
-
-impl PieceType {
-  fn value(&self) -> i32 {
-    match self {
-      PieceType::King => 0, // TODO: what should be the value of checkmate?
-      PieceType::Queen => 9,
-      PieceType::Bishop => 3,
-      PieceType::Knight => 3,
-      PieceType::Rook => 5,
-      PieceType::Pawn => 1,
-    }
-  }
-}
-
-#[derive(Debug, Hash, Eq, PartialEq, Clone)]
-enum File {
-  A,
-  B,
-  C,
-  D,
-  E,
-  F,
-  G,
-  H,
-}
-
-#[derive(Debug, Hash, Eq, PartialEq, Clone)]
 enum Color {
   White,
   Black,
@@ -154,54 +119,15 @@ impl std::fmt::Display for Color {
 
 #[derive(Hash, Eq, PartialEq, Clone)]
 pub struct Piece {
-  piece_type: PieceType,
+  piece_type: &'static str,
   color: Color,
-  file: File,
-  promoted_value: Option<i32>,
+  value: i32,
 }
 
 impl Piece {
-  fn new(piece_type: PieceType, color: Color, file: File) -> Piece {
-    Piece { piece_type, color, file, promoted_value: None }
-  }
-
-  fn with_promotion(mut self, piece_type: &PieceType) -> Piece {
-    self.promoted_value = Some(piece_type.value());
+  fn with_value(mut self, value: i32) -> Piece {
+    self.value = value;
     self
-  }
-
-  fn value(&self) -> i32 {
-    // Piece defers to the value of its type, unless it's been promoted, in
-    // which case the value is overridden in promoted_value.
-    self.promoted_value.unwrap_or_else(|| self.piece_type.value())
-  }
-}
-
-impl std::fmt::Debug for Piece {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{:?} {:?}", self.color, self.piece_type)?;
-    match self.piece_type {
-      PieceType::Bishop
-      | PieceType::Knight
-      | PieceType::Rook
-      | PieceType::Pawn => write!(f, " {:?}", self.file)?,
-      _ => (),
-    }
-    Ok(())
-  }
-}
-
-impl std::fmt::Display for PieceType {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let s = format!("{:?}", self);
-    Ok(write!(f, "{}", s.to_lowercase())?)
-  }
-}
-
-impl std::fmt::Display for File {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let s = format!("{:?}", self);
-    Ok(write!(f, "{}", s.to_lowercase())?)
   }
 }
 
@@ -210,13 +136,13 @@ impl std::fmt::Display for Piece {
     if f.alternate() {
       write!(f, "{} ", self.color)?;
     }
-    Ok(write!(f, "{} {}", self.piece_type, self.file)?)
+    Ok(write!(f, "{}", self.piece_type)?)
   }
 }
 
 pub struct Board {
   piece_map: HashMap<char, Piece>,
-  last_move: Option<(PieceType, char, char)>,
+  last_move: Option<(&'static str, char, char)>,
   move_num: i32,
 }
 
@@ -224,39 +150,39 @@ impl Board {
   pub fn starting() -> Board {
     Board {
       piece_map: maplit::hashmap! {
-          'a' => Piece::new(PieceType::Rook, Color::White, File::A),
-          'b' => Piece::new(PieceType::Knight, Color::White, File::B),
-          'c' => Piece::new(PieceType::Bishop, Color::White, File::C),
-          'd' => Piece::new(PieceType::Queen, Color::White, File::D),
-          'e' => Piece::new(PieceType::King, Color::White, File::E),
-          'f' => Piece::new(PieceType::Bishop, Color::White, File::F),
-          'g' => Piece::new(PieceType::Knight, Color::White, File::G),
-          'h' => Piece::new(PieceType::Rook, Color::White, File::H),
-          'i' => Piece::new(PieceType::Pawn, Color::White, File::A),
-          'j' => Piece::new(PieceType::Pawn, Color::White, File::B),
-          'k' => Piece::new(PieceType::Pawn, Color::White, File::C),
-          'l' => Piece::new(PieceType::Pawn, Color::White, File::D),
-          'm' => Piece::new(PieceType::Pawn, Color::White, File::E),
-          'n' => Piece::new(PieceType::Pawn, Color::White, File::F),
-          'o' => Piece::new(PieceType::Pawn, Color::White, File::G),
-          'p' => Piece::new(PieceType::Pawn, Color::White, File::H),
+          'a' => Piece { piece_type: "rook a", color: Color::White, value: 5},
+          'b' => Piece { piece_type: "knight b", color: Color::White, value: 3},
+          'c' => Piece { piece_type: "bishop c", color: Color::White, value: 3},
+          'd' => Piece { piece_type: "queen d", color: Color::White, value: 9},
+          'e' => Piece { piece_type: "king e", color: Color::White, value: 0},
+          'f' => Piece { piece_type: "bishop f", color: Color::White, value: 3},
+          'g' => Piece { piece_type: "knight g", color: Color::White, value: 3},
+          'h' => Piece { piece_type: "rook h", color: Color::White, value: 5},
+          'i' => Piece { piece_type: "pawn a", color: Color::White, value: 1},
+          'j' => Piece { piece_type: "pawn b", color: Color::White, value: 1},
+          'k' => Piece { piece_type: "pawn c", color: Color::White, value: 1},
+          'l' => Piece { piece_type: "pawn d", color: Color::White, value: 1},
+          'm' => Piece { piece_type: "pawn e", color: Color::White, value: 1},
+          'n' => Piece { piece_type: "pawn f", color: Color::White, value: 1},
+          'o' => Piece { piece_type: "pawn g", color: Color::White, value: 1},
+          'p' => Piece { piece_type: "pawn h", color: Color::White, value: 1},
 
-          '4' => Piece::new(PieceType::Rook, Color::Black, File::A),
-          '5' => Piece::new(PieceType::Knight, Color::Black, File::B),
-          '6' => Piece::new(PieceType::Bishop, Color::Black, File::C),
-          '7' => Piece::new(PieceType::Queen, Color::Black, File::D),
-          '8' => Piece::new(PieceType::King, Color::Black, File::E),
-          '9' => Piece::new(PieceType::Bishop, Color::Black, File::F),
-          '!' => Piece::new(PieceType::Knight, Color::Black, File::G),
-          '?' => Piece::new(PieceType::Rook, Color::Black, File::H),
-          'W' => Piece::new(PieceType::Pawn, Color::Black, File::A),
-          'X' => Piece::new(PieceType::Pawn, Color::Black, File::B),
-          'Y' => Piece::new(PieceType::Pawn, Color::Black, File::C),
-          'Z' => Piece::new(PieceType::Pawn, Color::Black, File::D),
-          '0' => Piece::new(PieceType::Pawn, Color::Black, File::E),
-          '1' => Piece::new(PieceType::Pawn, Color::Black, File::F),
-          '2' => Piece::new(PieceType::Pawn, Color::Black, File::G),
-          '3' => Piece::new(PieceType::Pawn, Color::Black, File::H),
+          '4' => Piece { piece_type: "rook a", color: Color::Black, value: 5},
+          '5' => Piece { piece_type: "knight b", color: Color::Black, value: 3},
+          '6' => Piece { piece_type: "bishop c", color: Color::Black, value: 3},
+          '7' => Piece { piece_type: "queen d", color: Color::Black, value: 9},
+          '8' => Piece { piece_type: "king e", color: Color::Black, value: 0},
+          '9' => Piece { piece_type: "bishop f", color: Color::Black, value: 3},
+          '!' => Piece { piece_type: "knight g", color: Color::Black, value: 3},
+          '?' => Piece { piece_type: "rook h", color: Color::Black, value: 5},
+          'W' => Piece { piece_type: "pawn a", color: Color::Black, value: 1},
+          'X' => Piece { piece_type: "pawn b", color: Color::Black, value: 1},
+          'Y' => Piece { piece_type: "pawn c", color: Color::Black, value: 1},
+          'Z' => Piece { piece_type: "pawn d", color: Color::Black, value: 1},
+          '0' => Piece { piece_type: "pawn e", color: Color::Black, value: 1},
+          '1' => Piece { piece_type: "pawn f", color: Color::Black, value: 1},
+          '2' => Piece { piece_type: "pawn g", color: Color::Black, value: 1},
+          '3' => Piece { piece_type: "pawn h", color: Color::Black, value: 1},
       },
       last_move: None,
       move_num: 0,
@@ -292,7 +218,7 @@ impl Board {
     // but if it gets promoted to a queen on the board then its capture will be
     // worth 9.
     if let Some(&next_square_lookup) = PROMOTION_DIR.get(&end) {
-      let promotion = PROMOTION_TYPE.get(&end).unwrap_or_else(|| {
+      let promotion_value = PROMOTION_VALUE.get(&end).unwrap_or_else(|| {
         unreachable!(
           "encoded promotion '{}' has no corresponding piece type",
           end
@@ -307,12 +233,12 @@ impl Board {
       let captured_piece = self.piece_map.get(&end).cloned();
       let score = captured_piece
         .as_ref()
-        .map(|captured_piece| captured_piece.value())
+        .map(|captured_piece| captured_piece.value)
         .unwrap_or(0);
       self
         .piece_map
-        .insert(*end, moved_piece.clone().with_promotion(promotion));
-      self.last_move = Some((moved_piece.piece_type.clone(), start, *end));
+        .insert(*end, moved_piece.clone().with_value(*promotion_value));
+      self.last_move = Some((moved_piece.piece_type, start, *end));
 
       return Ok(db::Move {
         game_id: String::from(game_id),
@@ -357,7 +283,7 @@ impl Board {
         // Adjust the score for this move's piece based on last move
       }
     }
-    let score = captured_piece.as_ref().map(|p| p.value()).unwrap_or(0);
+    let score = captured_piece.as_ref().map(|p| p.value).unwrap_or(0);
 
     // Castling is handled here by seeing if we see the king jump 2 squares
     // in one of the possible castling scenarios. If this happens, we need
@@ -366,28 +292,28 @@ impl Board {
     // square when its moved later.
     match (moved_piece.clone(), start, end) {
       // White kingside castle
-      (Piece { piece_type: PieceType::King, .. }, 'e', 'g') => {
+      (Piece { piece_type: "king e", .. }, 'e', 'g') => {
         self.piece_map.insert(end, moved_piece.clone());
         let (_, rook) =
           self.piece_map.remove_entry(&'h').ok_or(Error::PieceNotFound('h'))?;
         self.piece_map.insert('f', rook);
       }
       // White queenside castle
-      (Piece { piece_type: PieceType::King, .. }, 'e', 'c') => {
+      (Piece { piece_type: "king e", .. }, 'e', 'c') => {
         self.piece_map.insert(end, moved_piece.clone());
         let (_, rook) =
           self.piece_map.remove_entry(&'a').ok_or(Error::PieceNotFound('a'))?;
         self.piece_map.insert('d', rook);
       }
       // Black kingside castle
-      (Piece { piece_type: PieceType::King, .. }, '8', '!') => {
+      (Piece { piece_type: "king e", .. }, '8', '!') => {
         self.piece_map.insert(end, moved_piece.clone());
         let (_, rook) =
           self.piece_map.remove_entry(&'?').ok_or(Error::PieceNotFound('?'))?;
         self.piece_map.insert('9', rook);
       }
       // Black queenside castle
-      (Piece { piece_type: PieceType::King, .. }, '8', '6') => {
+      (Piece { piece_type: "king e", .. }, '8', '6') => {
         self.piece_map.insert(end, moved_piece.clone());
         let (_, rook) =
           self.piece_map.remove_entry(&'4').ok_or(Error::PieceNotFound('4'))?;
@@ -398,7 +324,7 @@ impl Board {
         self.piece_map.insert(end, moved_piece.clone());
       }
     }
-    self.last_move = Some((moved_piece.piece_type.clone(), start, end));
+    self.last_move = Some((moved_piece.piece_type, start, end));
     // Return the starting piece along with its score
     Ok(db::Move {
       game_id: String::from(game_id),
@@ -416,42 +342,6 @@ impl Board {
 }
 
 lazy_static! {
-  static ref WHITE_PIECES: Vec<Piece> = vec![
-    Piece::new(PieceType::King, Color::White, File::E),
-    Piece::new(PieceType::Queen, Color::White, File::D),
-    Piece::new(PieceType::Rook, Color::White, File::A),
-    Piece::new(PieceType::Rook, Color::White, File::H),
-    Piece::new(PieceType::Knight, Color::White, File::B),
-    Piece::new(PieceType::Knight, Color::White, File::G),
-    Piece::new(PieceType::Bishop, Color::White, File::C),
-    Piece::new(PieceType::Bishop, Color::White, File::F),
-    Piece::new(PieceType::Pawn, Color::White, File::A),
-    Piece::new(PieceType::Pawn, Color::White, File::B),
-    Piece::new(PieceType::Pawn, Color::White, File::C),
-    Piece::new(PieceType::Pawn, Color::White, File::D),
-    Piece::new(PieceType::Pawn, Color::White, File::E),
-    Piece::new(PieceType::Pawn, Color::White, File::F),
-    Piece::new(PieceType::Pawn, Color::White, File::G),
-    Piece::new(PieceType::Pawn, Color::White, File::H),
-  ];
-  static ref BLACK_PIECES: Vec<Piece> = vec![
-    Piece::new(PieceType::King, Color::Black, File::E),
-    Piece::new(PieceType::Queen, Color::Black, File::D),
-    Piece::new(PieceType::Rook, Color::Black, File::A),
-    Piece::new(PieceType::Rook, Color::Black, File::H),
-    Piece::new(PieceType::Knight, Color::Black, File::B),
-    Piece::new(PieceType::Knight, Color::Black, File::G),
-    Piece::new(PieceType::Bishop, Color::Black, File::C),
-    Piece::new(PieceType::Bishop, Color::Black, File::F),
-    Piece::new(PieceType::Pawn, Color::Black, File::A),
-    Piece::new(PieceType::Pawn, Color::Black, File::B),
-    Piece::new(PieceType::Pawn, Color::Black, File::C),
-    Piece::new(PieceType::Pawn, Color::Black, File::D),
-    Piece::new(PieceType::Pawn, Color::Black, File::E),
-    Piece::new(PieceType::Pawn, Color::Black, File::F),
-    Piece::new(PieceType::Pawn, Color::Black, File::G),
-    Piece::new(PieceType::Pawn, Color::Black, File::H),
-  ];
   static ref PROMOTE_LEFT: HashMap<char, char> = maplit::hashmap! {
     'j' => 'a',
     'k' => 'b',
@@ -516,51 +406,51 @@ lazy_static! {
     ']' => &*PROMOTE_RIGHT,
     '$' => &*PROMOTE_RIGHT,
   };
-  static ref PROMOTION_TYPE: HashMap<char, PieceType> = maplit::hashmap! {
-    '~' => PieceType::Queen,
-    '^' => PieceType::Knight,
-    '_' => PieceType::Rook,
-    '#' => PieceType::Bishop,
-    '(' => PieceType::Knight,
-    '{' => PieceType::Queen,
-    '[' => PieceType::Rook,
-    '@' => PieceType::Bishop,
-    '}' => PieceType::Queen,
-    ')' => PieceType::Knight,
-    ']' => PieceType::Rook,
-    '$' => PieceType::Bishop,
+  static ref PROMOTION_VALUE: HashMap<char, i32> = maplit::hashmap! {
+    '~' => 9,
+    '^' => 3,
+    '_' => 5,
+    '#' => 3,
+    '(' => 3,
+    '{' => 9,
+    '[' => 5,
+    '@' => 3,
+    '}' => 9,
+    ')' => 3,
+    ']' => 5,
+    '$' => 3,
   };
-  static ref EN_PASSANT_MOVES: HashMap<(char, char), (PieceType, char, char)> = maplit::hashmap! {
-    ('y', 'r') => (PieceType::Pawn, 'j', 'z'),
-    ('z', 's') => (PieceType::Pawn, 'k', 'A'),
-    ('A', 't') => (PieceType::Pawn, 'l', 'B'),
-    ('B', 'u') => (PieceType::Pawn, 'm', 'C'),
-    ('C', 'v') => (PieceType::Pawn, 'n', 'D'),
-    ('D', 'w') => (PieceType::Pawn, 'o', 'E'),
-    ('E', 'x') => (PieceType::Pawn, 'p', 'F'),
+  static ref EN_PASSANT_MOVES: HashMap<(char, char), (&'static str, char, char)> = maplit::hashmap! {
+    ('y', 'r') => ("pawn b", 'j', 'z'),
+    ('z', 's') => ("pawn c", 'k', 'A'),
+    ('A', 't') => ("pawn d", 'l', 'B'),
+    ('B', 'u') => ("pawn e", 'm', 'C'),
+    ('C', 'v') => ("pawn f", 'n', 'D'),
+    ('D', 'w') => ("pawn g", 'o', 'E'),
+    ('E', 'x') => ("pawn h", 'p', 'F'),
 
-    ('z', 'q') => (PieceType::Pawn, 'i', 'y'),
-    ('A', 'r') => (PieceType::Pawn, 'j', 'z'),
-    ('B', 's') => (PieceType::Pawn, 'k', 'A'),
-    ('C', 't') => (PieceType::Pawn, 'l', 'B'),
-    ('D', 'u') => (PieceType::Pawn, 'm', 'C'),
-    ('E', 'x') => (PieceType::Pawn, 'n', 'D'),
-    ('F', 'w') => (PieceType::Pawn, 'o', 'E'),
+    ('z', 'q') => ("pawn a", 'i', 'y'),
+    ('A', 'r') => ("pawn b", 'j', 'z'),
+    ('B', 's') => ("pawn c", 'k', 'A'),
+    ('C', 't') => ("pawn d", 'l', 'B'),
+    ('D', 'u') => ("pawn e", 'm', 'C'),
+    ('E', 'x') => ("pawn f", 'n', 'D'),
+    ('F', 'w') => ("pawn g", 'o', 'E'),
 
-    ('H', 'O') => (PieceType::Pawn, 'W', 'G'),
-    ('I', 'P') => (PieceType::Pawn, 'X', 'H'),
-    ('J', 'Q') => (PieceType::Pawn, 'Y', 'I'),
-    ('K', 'R') => (PieceType::Pawn, 'Z', 'J'),
-    ('L', 'S') => (PieceType::Pawn, '0', 'K'),
-    ('M', 'T') => (PieceType::Pawn, '1', 'L'),
-    ('N', 'U') => (PieceType::Pawn, '2', 'M'),
+    ('H', 'O') => ("pawn a", 'W', 'G'),
+    ('I', 'P') => ("pawn b", 'X', 'H'),
+    ('J', 'Q') => ("pawn c", 'Y', 'I'),
+    ('K', 'R') => ("pawn d", 'Z', 'J'),
+    ('L', 'S') => ("pawn e", '0', 'K'),
+    ('M', 'T') => ("pawn f", '1', 'L'),
+    ('N', 'U') => ("pawn g", '2', 'M'),
 
-    ('G', 'P') => (PieceType::Pawn, 'X', 'H'),
-    ('H', 'Q') => (PieceType::Pawn, 'Y', 'I'),
-    ('I', 'R') => (PieceType::Pawn, 'Z', 'J'),
-    ('J', 'S') => (PieceType::Pawn, '0', 'K'),
-    ('K', 'T') => (PieceType::Pawn, '1', 'L'),
-    ('L', 'U') => (PieceType::Pawn, '2', 'M'),
-    ('M', 'V') => (PieceType::Pawn, '3', 'N'),
+    ('G', 'P') => ("pawn b", 'X', 'H'),
+    ('H', 'Q') => ("pawn c", 'Y', 'I'),
+    ('I', 'R') => ("pawn d", 'Z', 'J'),
+    ('J', 'S') => ("pawn e", '0', 'K'),
+    ('K', 'T') => ("pawn f", '1', 'L'),
+    ('L', 'U') => ("pawn g", '2', 'M'),
+    ('M', 'V') => ("pawn h", '3', 'N'),
   };
 }
