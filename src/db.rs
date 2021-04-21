@@ -27,8 +27,9 @@ pub struct Move {
 
 #[derive(Debug)]
 pub struct Game {
-  pub source: String,
   pub id: String,
+  pub source: String,
+  pub source_id: String,
   pub end_time: i64,
   pub white_player_id: String,
   pub white_player_name: String,
@@ -51,8 +52,9 @@ impl Move {
   {
     sqlx::query("INSERT INTO Moves (game_id, move_num, color,
             moved_piece, starting_location, ending_location, captured_piece, capture_score) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(game_id, move_num, color) DO NOTHING")
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            //ON CONFLICT(game_id, move_num, color) DO NOTHING"
+    )
             .bind(game_id)
             .bind(self.move_num)
             .bind(self.color)
@@ -70,14 +72,15 @@ impl Game {
   ) -> sqlx::query::Query<'static, sqlx::Any, sqlx::any::AnyArguments<'static>>
   {
     sqlx::query(
-      "INSERT INTO Games (source, id, end_time,
+      "INSERT INTO Games (id, source, source_id, end_time,
         white_player_id, white_player_name, white_player_rating,
         black_player_id, black_player_name, black_player_rating) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO NOTHING",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      //ON CONFLICT(source, id) DO NOTHING",
     )
-    .bind(self.source)
     .bind(self.id)
+    .bind(self.source)
+    .bind(self.source_id)
     .bind(self.end_time)
     .bind(self.white_player_id)
     .bind(self.white_player_name)

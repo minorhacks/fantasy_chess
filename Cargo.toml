@@ -18,3 +18,4 @@ serde_json = "1"
 sqlx = { version = "0.5", features = ["any", "runtime-tokio-rustls", "mysql", "sqlite"] }
 thiserror = "1"
 tokio = {version = "1", features = ["macros", "rt-multi-thread"]}
+uuid = {version = "0.8", features = ["v4"]}

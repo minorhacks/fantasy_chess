@@ -70,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
 
       // Insert db::Game into DB
       let q = db_game.insert_query().execute(&db).await?;
-      println!("query result: {:?}", q);
+      println!("game insert: {:?}", q);
 
       // For each move
       let db_moves = game.moves()?;
@@ -89,20 +89,20 @@ async fn main() -> anyhow::Result<()> {
 async fn connect_to_db(
   args: &clap::ArgMatches<'_>,
 ) -> sqlx::Result<sqlx::Pool<sqlx::Any>> {
-  // If database arg is sqlite
   if let Some(db_path) = args.value_of("sqlite_db_file") {
-    // Open connection to sqlite file
     let connection_string = "sqlite://".to_owned() + db_path;
-    //let pool = sqlx::sqlite::SqlitePoolOptions::new()
     let pool = sqlx::any::AnyPoolOptions::new()
       .max_connections(5)
       .connect(&connection_string)
       .await?;
     return Ok(pool);
-  } else if let Some(_connection_string) = args.value_of("mysql_db") {
-    // If database arg is mysql
-    //   Open connection to MySQL DB
-    unimplemented!("mysql support not yet implemented")
+  } else if let Some(connection_string) = args.value_of("mysql_db") {
+    let connection_string = "mysql://".to_owned() + connection_string;
+    let pool = sqlx::any::AnyPoolOptions::new()
+      .max_connections(5)
+      .connect(&connection_string)
+      .await?;
+    return Ok(pool);
   } else {
     unimplemented!("unsupported database type")
   }
