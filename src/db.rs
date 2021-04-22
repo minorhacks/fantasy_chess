@@ -74,7 +74,7 @@ impl Game {
         white_player_id, white_player_name, white_player_rating,
         black_player_id, black_player_name, black_player_rating) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(source, id) DO NOTHING",
+        ON CONFLICT(id) DO NOTHING",
     )
     .bind(self.source)
     .bind(self.id)
