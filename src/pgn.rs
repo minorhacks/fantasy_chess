@@ -1,58 +1,52 @@
-use itertools::Itertools;
-use std::io::BufRead;
+use std::mem::swap;
 
-pub struct PgnSplitter<T: std::io::Read> {
-  rdr: std::iter::Peekable<std::io::Lines<std::io::BufReader<T>>>,
-  done: bool,
+use shakmaty::Position;
+
+use crate::db;
+
+pub struct GameScore {
+  game: Option<db::Game>,
+  moves: Vec<db::Move>,
+  board: shakmaty::Chess,
 }
 
-impl<T: std::io::Read> PgnSplitter<T> {
-  pub fn new(rdr: T) -> PgnSplitter<T> {
-    PgnSplitter {
-      rdr: std::io::BufReader::new(rdr).lines().peekable(),
-      done: false,
+impl GameScore {
+  pub fn new() -> GameScore {
+    GameScore {
+      game: None,
+      moves: Vec::new(),
+      board: shakmaty::Chess::default(),
     }
   }
 }
 
-impl<T: std::io::Read> Iterator for PgnSplitter<T> {
-  type Item = String;
+impl Default for GameScore {
+  fn default() -> Self {
+    Self::new()
+  }
+}
 
-  fn next(&mut self) -> Option<Self::Item> {
-    let mut done = self.done;
-    if done {
-      return None;
-    }
-    if self.rdr.peek().is_none() {
-      self.done = true;
-      return None;
-    }
-    let mut empty_line_count = 0;
-    let pgn = self
-      .rdr
-      .fold_while(String::new(), |acc, line| match line {
-        Err(_e) => {
-          done = true;
-          itertools::FoldWhile::Done(acc)
-        }
-        Ok(s) => {
-          if s.is_empty() {
-            empty_line_count += 1;
-          }
-          let new_acc = acc + "\n" + &s;
-          if empty_line_count == 2 {
-            itertools::FoldWhile::Done(new_acc)
-          } else {
-            itertools::FoldWhile::Continue(new_acc)
-          }
-        }
-      })
-      .into_inner();
-    self.done = done;
-    if done {
-      None
+impl pgn_reader::Visitor for GameScore {
+  type Result = (db::Game, Vec<db::Move>);
+
+  fn begin_variation(&mut self) -> pgn_reader::Skip {
+    pgn_reader::Skip(true)
+  }
+
+  fn san(&mut self, san_plus: pgn_reader::SanPlus) {
+    if let Ok(m) = san_plus.san.to_move(&self.board) {
+      // Based on the move, we need to know:
+      // * which piece got moved
+      // * if it captured, which piece got captured
+      self.board.play_unchecked(&m);
     } else {
-      Some(pgn)
+      panic!("invalid move");
     }
+  }
+
+  fn end_game(&mut self) -> Self::Result {
+    let mut moves = Vec::new();
+    swap(&mut moves, &mut self.moves);
+    (self.game.take().unwrap(), moves)
   }
 }

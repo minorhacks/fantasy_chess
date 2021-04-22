@@ -67,7 +67,7 @@ async fn main() -> anyhow::Result<()> {
       let db_game = game.game()?;
       let game_id = db_game.id.clone();
 
-      let q = db_game.insert_query().execute(&db).await?;
+      db_game.insert_query().execute(&db).await?;
 
       let db_moves = game.moves()?;
       for m in db_moves {
@@ -114,11 +114,10 @@ async fn parse_game(
     return Ok(Box::new(res));
   } else if let Some(pgn_filename) = args.value_of("pgn_file") {
     let f = std::fs::File::open(pgn_filename)?;
-    let scanner = pgn::PgnSplitter::new(f);
-    //for (i, f) in scanner.enumerate() {
-    //  println!("+++++ PGN {} +++++\n{}", i, f);
-    //}
-    println!("PGN count: {}", scanner.count());
+    let mut scanner = pgn_reader::BufferedReader::new(f);
+    let mut visitor = pgn::GameScore::new();
+    let (_db_game, _db_moves) = scanner.read_game(&mut visitor)?.unwrap();
+    // TODO: return something
   }
   unimplemented!()
 }
