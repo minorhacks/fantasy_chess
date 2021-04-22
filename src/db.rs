@@ -1,4 +1,4 @@
-use crate::chess_com;
+use crate::dumbchess;
 use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug)]
@@ -8,7 +8,7 @@ pub enum Error {
   #[error("failed to translate move")]
   MoveTranslation {
     #[from]
-    source: chess_com::Error,
+    source: dumbchess::Error,
   },
 }
 
@@ -74,7 +74,7 @@ impl Game {
         white_player_id, white_player_name, white_player_rating,
         black_player_id, black_player_name, black_player_rating) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(source, id) DO NOTHING",
+        ON CONFLICT(id) DO NOTHING",
     )
     .bind(self.source)
     .bind(self.id)
