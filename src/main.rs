@@ -73,10 +73,10 @@ async fn main() -> anyhow::Result<()> {
       println!("query result: {:?}", q);
 
       // For each move
-      let db_moves = game.moves(&game_id)?;
+      let db_moves = game.moves()?;
       for m in db_moves {
         // Insert db::Move into DB
-        m.insert_query().execute(&db).await?;
+        m.insert_query(game_id.clone()).execute(&db).await?;
       }
     }
     _ => {
