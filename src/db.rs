@@ -1,4 +1,4 @@
-use crate::chess_com;
+use crate::dumbchess;
 use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug)]
@@ -8,7 +8,7 @@ pub enum Error {
   #[error("failed to translate move")]
   MoveTranslation {
     #[from]
-    source: chess_com::Error,
+    source: dumbchess::Error,
   },
 }
 
