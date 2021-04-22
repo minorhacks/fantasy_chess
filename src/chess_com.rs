@@ -56,14 +56,14 @@ impl db::Recordable for GameResponse {
     })
   }
 
-  fn moves(&self, game_id: &str) -> db::Result<Vec<db::Move>> {
+  fn moves(&self) -> db::Result<Vec<db::Move>> {
     let mut board = Board::starting();
     let mut move_list = self.game.move_list.chars().fuse();
     let mut parsed_moves = Vec::new();
 
     while let Some(start) = move_list.next() {
       if let Some(end) = move_list.next() {
-        let m = board.make_move(game_id, start, end)?;
+        let m = board.make_move(start, end)?;
         parsed_moves.push(m);
       } else {
         return Err(db::Error::GameTranslation);
@@ -258,12 +258,7 @@ impl Board {
     }
   }
 
-  fn make_move(
-    &mut self,
-    game_id: &str,
-    start: char,
-    end: char,
-  ) -> Result<db::Move, Error> {
+  fn make_move(&mut self, start: char, end: char) -> Result<db::Move, Error> {
     let move_num = self.move_num;
     self.move_num += 1;
     // Fetch the last move. On all exits to this function, set the last move as
@@ -310,7 +305,6 @@ impl Board {
       self.last_move = Some((moved_piece.piece_type, start, *end));
 
       return Ok(db::Move {
-        game_id: String::from(game_id),
         move_num,
         color: moved_piece.color.to_string(),
         moved_piece: moved_piece.to_string(),
@@ -396,7 +390,6 @@ impl Board {
     self.last_move = Some((moved_piece.piece_type, start, end));
     // Return the starting piece along with its score
     Ok(db::Move {
-      game_id: String::from(game_id),
       move_num,
       color: moved_piece.color.to_string(),
       moved_piece: moved_piece.to_string(),

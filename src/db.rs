@@ -16,7 +16,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub struct Move {
-  pub game_id: String,
   pub move_num: i32,
   pub color: String,
   pub moved_piece: String,
@@ -41,19 +40,20 @@ pub struct Game {
 
 pub trait Recordable {
   fn game(&self) -> Result<Game>;
-  fn moves(&self, game_id: &str) -> Result<Vec<Move>>;
+  fn moves(&self) -> Result<Vec<Move>>;
 }
 
 impl Move {
   pub fn insert_query(
     self,
+    game_id: String,
   ) -> sqlx::query::Query<'static, sqlx::Any, sqlx::any::AnyArguments<'static>>
   {
     sqlx::query("INSERT INTO Moves (game_id, move_num, color,
             moved_piece, starting_location, ending_location, captured_piece, capture_score) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(game_id, move_num, color) DO NOTHING")
-            .bind(self.game_id)
+            .bind(game_id)
             .bind(self.move_num)
             .bind(self.color)
             .bind(self.moved_piece)
