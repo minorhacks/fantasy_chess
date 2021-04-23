@@ -116,8 +116,8 @@ async fn parse_game(
     let f = std::fs::File::open(pgn_filename)?;
     let mut scanner = pgn_reader::BufferedReader::new(f);
     let mut visitor = pgn::GameScore::new();
-    let (_db_game, _db_moves) = scanner.read_game(&mut visitor)?.unwrap();
-    // TODO: return something
+    scanner.read_game(&mut visitor)?.unwrap();
+    return Ok(Box::new(visitor));
   }
   unimplemented!()
 }

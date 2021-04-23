@@ -14,7 +14,7 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Move {
   pub move_num: i32,
   pub color: String,
@@ -25,7 +25,7 @@ pub struct Move {
   pub capture_score: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Game {
   pub id: String,
   pub source: String,
@@ -67,6 +67,21 @@ impl Move {
 }
 
 impl Game {
+  pub fn empty() -> Game {
+    Game {
+      id: String::new(),
+      source: String::new(),
+      source_id: String::new(),
+      end_time: 0,
+      white_player_id: String::new(),
+      white_player_name: String::new(),
+      white_player_rating: 0,
+      black_player_id: String::new(),
+      black_player_name: String::new(),
+      black_player_rating: 0,
+    }
+  }
+
   pub fn insert_query(
     self,
   ) -> sqlx::query::Query<'static, sqlx::Any, sqlx::any::AnyArguments<'static>>

@@ -271,6 +271,7 @@ impl std::fmt::Display for Piece {
   }
 }
 
+#[derive(Clone)]
 pub struct Board {
   piece_map: HashMap<Square, Piece>,
   last_move: Option<(&'static str, Square, Square)>,
@@ -357,7 +358,6 @@ impl Board {
         .map(|f| f.0 == last_move.0 && f.1 == last_move.1 && f.2 == last_move.2)
         == Some(true)
       {
-        println!("EN PASSANT");
         // Remove the piece on the last move's end square
         captured_piece = Some(
           self
