@@ -8,8 +8,13 @@ extern crate serde_json;
 extern crate thiserror;
 extern crate tokio;
 
+use std::sync::Arc;
+
 use fantasy_chess::chess_com;
 use fantasy_chess::pgn;
+use futures::future::try_join_all;
+
+const MAX_DB_CONNECTIONS: u32 = 100;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -67,12 +72,18 @@ async fn main() -> anyhow::Result<()> {
       let db_game = game.game()?;
       let game_id = db_game.id.clone();
 
-      db_game.insert_query().execute(&db).await?;
+      db_game.insert_query().execute(&*db).await?;
 
       let db_moves = game.moves()?;
+      let mut handles = Vec::new();
       for m in db_moves {
-        m.insert_query(game_id.clone()).execute(&db).await?;
+        let db = db.clone();
+        let game_id = game_id.clone();
+        handles.push(tokio::spawn(async move {
+          m.insert_query(game_id.clone()).execute(&*db).await
+        }));
       }
+      try_join_all(handles).await?;
     }
     _ => {
       unimplemented!("command not implemented")
@@ -83,21 +94,21 @@ async fn main() -> anyhow::Result<()> {
 
 async fn connect_to_db(
   args: &clap::ArgMatches<'_>,
-) -> sqlx::Result<sqlx::Pool<sqlx::Any>> {
+) -> sqlx::Result<Arc<sqlx::Pool<sqlx::Any>>> {
   if let Some(db_path) = args.value_of("sqlite_db_file") {
     let connection_string = "sqlite://".to_owned() + db_path;
     let pool = sqlx::any::AnyPoolOptions::new()
-      .max_connections(5)
+      .max_connections(MAX_DB_CONNECTIONS)
       .connect(&connection_string)
       .await?;
-    return Ok(pool);
+    return Ok(Arc::new(pool));
   } else if let Some(connection_string) = args.value_of("mysql_db") {
     let connection_string = "mysql://".to_owned() + connection_string;
     let pool = sqlx::any::AnyPoolOptions::new()
-      .max_connections(5)
+      .max_connections(MAX_DB_CONNECTIONS)
       .connect(&connection_string)
       .await?;
-    return Ok(pool);
+    return Ok(Arc::new(pool));
   } else {
     unimplemented!("unsupported database type")
   }
