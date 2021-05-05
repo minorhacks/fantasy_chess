@@ -8,8 +8,9 @@ extern crate serde_json;
 extern crate thiserror;
 extern crate tokio;
 
-use std::sync::Arc;
+use std::{convert::TryInto, sync::Arc};
 
+use anyhow::anyhow;
 use fantasy_chess::chess_com;
 use fantasy_chess::pgn;
 use futures::future::try_join_all;
@@ -68,22 +69,27 @@ async fn main() -> anyhow::Result<()> {
     ("ingest", Some(ingest_args)) => {
       let db = connect_to_db(ingest_args).await?;
 
-      let game = parse_game(ingest_args).await?;
-      let db_game = game.game()?;
-      let game_id = db_game.id.clone();
-
-      db_game.insert_query().execute(&*db).await?;
-
-      let db_moves = game.moves()?;
-      let mut handles = Vec::new();
-      for m in db_moves {
-        let db = db.clone();
-        let game_id = game_id.clone();
+      let games = parse_games(ingest_args).await?;
+      let bar = indicatif::ProgressBar::new(games.len().try_into().unwrap());
+      for game in games {
+        let db_game = game.game()?;
+        let game_id = db_game.id.clone();
+        let db_moves = game.moves()?;
+        let mut handles = Vec::new();
+        let pool_for_game_insert = db.clone();
         handles.push(tokio::spawn(async move {
-          m.insert_query(game_id.clone()).execute(&*db).await
+          db_game.insert_query().execute(&*pool_for_game_insert).await
         }));
+        for m in db_moves {
+          let db = db.clone();
+          let game_id = game_id.clone();
+          handles.push(tokio::spawn(async move {
+            m.insert_query(game_id.clone()).execute(&*db).await
+          }));
+        }
+        try_join_all(handles).await?;
+        bar.inc(1);
       }
-      try_join_all(handles).await?;
     }
     _ => {
       unimplemented!("command not implemented")
@@ -114,21 +120,32 @@ async fn connect_to_db(
   }
 }
 
-async fn parse_game(
+async fn parse_games(
   args: &clap::ArgMatches<'_>,
-) -> anyhow::Result<Box<dyn fantasy_chess::db::Recordable>> {
+) -> anyhow::Result<Vec<Box<dyn fantasy_chess::db::Recordable>>> {
   if let Some(chess_com_id) = args.value_of("chess_com_game_id") {
     let uri =
       format!("https://www.chess.com/callback/live/game/{}", chess_com_id);
     let body = reqwest::get(&uri).await?.text().await?;
     let res: chess_com::GameResponse = serde_json::from_str(&body)?;
-    return Ok(Box::new(res));
+    return Ok(vec![Box::new(res)]);
   } else if let Some(pgn_filename) = args.value_of("pgn_file") {
     let f = std::fs::File::open(pgn_filename)?;
     let mut scanner = pgn_reader::BufferedReader::new(f);
-    let mut visitor = pgn::GameScore::new();
-    scanner.read_game(&mut visitor)?.unwrap();
-    return Ok(Box::new(visitor));
+    let mut games: Vec<Box<dyn fantasy_chess::db::Recordable>> = Vec::new();
+    let mut game_counter = 0;
+    loop {
+      let mut visitor = pgn::GameScore::new();
+      let res = scanner.read_game(&mut visitor);
+      match res {
+        Ok(Some(score)) => games.push(Box::new(score)),
+        Ok(None) => return Ok(games),
+        Err(e) => {
+          return Err(anyhow!("processing game {}: {}", game_counter, e))
+        }
+      }
+      game_counter += 1;
+    }
   }
   unimplemented!()
 }
