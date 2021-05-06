@@ -15,7 +15,7 @@ use fantasy_chess::chess_com;
 use fantasy_chess::pgn;
 use futures::future::try_join_all;
 
-const MAX_DB_CONNECTIONS: u32 = 100;
+const MAX_DB_CONNECTIONS: u32 = 40;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -77,14 +77,12 @@ async fn main() -> anyhow::Result<()> {
         let db_moves = game.moves()?;
         let mut handles = Vec::new();
         let pool_for_game_insert = db.clone();
-        handles.push(tokio::spawn(async move {
-          db_game.insert_query().execute(&*pool_for_game_insert).await
-        }));
+        db_game.insert_query().execute(&*pool_for_game_insert).await.unwrap();
         for m in db_moves {
           let db = db.clone();
           let game_id = game_id.clone();
           handles.push(tokio::spawn(async move {
-            m.insert_query(game_id.clone()).execute(&*db).await
+            m.insert_query(game_id.clone()).execute(&*db).await.unwrap()
           }));
         }
         try_join_all(handles).await?;
@@ -138,7 +136,8 @@ async fn parse_games(
       let mut visitor = pgn::GameScore::new();
       let res = scanner.read_game(&mut visitor);
       match res {
-        Ok(Some(score)) => games.push(Box::new(score)),
+        Ok(Some(Some(score))) => games.push(Box::new(score)),
+        Ok(Some(None)) => (),
         Ok(None) => return Ok(games),
         Err(e) => {
           return Err(anyhow!("processing game {}: {}", game_counter, e))

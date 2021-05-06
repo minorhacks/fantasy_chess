@@ -12,6 +12,8 @@ pub struct GameScore {
 
   date: String,
   time: String,
+
+  nonstandard_game: bool,
 }
 
 impl GameScore {
@@ -24,6 +26,8 @@ impl GameScore {
 
       date: String::new(),
       time: String::new(),
+
+      nonstandard_game: false,
     }
   }
 }
@@ -45,7 +49,7 @@ impl db::Recordable for GameScore {
 }
 
 impl pgn_reader::Visitor for GameScore {
-  type Result = Self;
+  type Result = Option<Self>;
 
   fn begin_variation(&mut self) -> pgn_reader::Skip {
     pgn_reader::Skip(true)
@@ -107,6 +111,14 @@ impl pgn_reader::Visitor for GameScore {
           self.game.source_id = suffix.to_string();
         }
       }
+      "event" => {
+        if value.to_lowercase().contains("odds chess") {
+          self.nonstandard_game = true;
+        }
+        if value.to_lowercase().contains("chess960") {
+          self.nonstandard_game = true;
+        }
+      }
       _ => (),
     }
   }
@@ -118,7 +130,14 @@ impl pgn_reader::Visitor for GameScore {
       chrono::NaiveDateTime::parse_from_str(&date_time, "%Y.%m.%d %H:%M:%S")
         .unwrap_or_else(|_| panic!("invalid date/time: {}", date_time))
         .timestamp();
-    pgn_reader::Skip(false)
+    println!(
+      "Game between {} and {} on {}. Standard: {}",
+      self.game.white_player_name,
+      self.game.black_player_name,
+      self.game.end_time,
+      !self.nonstandard_game,
+    );
+    pgn_reader::Skip(self.nonstandard_game)
   }
 
   fn san(&mut self, san_plus: pgn_reader::SanPlus) {
@@ -143,7 +162,11 @@ impl pgn_reader::Visitor for GameScore {
   }
 
   fn end_game(&mut self) -> Self::Result {
-    self.clone()
+    if self.nonstandard_game {
+      None
+    } else {
+      Some(self.clone())
+    }
   }
 }
 
