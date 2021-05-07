@@ -8,16 +8,13 @@ extern crate serde_json;
 extern crate thiserror;
 extern crate tokio;
 
-use std::{convert::TryInto, pin::Pin, sync::Arc};
-use tokio::sync::Mutex;
+use std::sync::Arc;
 
-use anyhow::anyhow;
+use tokio::sync::mpsc::{self, Receiver, Sender};
+
 use async_stream::stream;
-use fantasy_chess::chess_com;
 use fantasy_chess::pgn;
-use futures::{future::try_join_all, pin_mut, Stream, StreamExt};
-
-const MAX_DB_CONNECTIONS: u32 = 40;
+use futures::{future::join_all, pin_mut, Stream, StreamExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -63,51 +60,66 @@ async fn main() -> anyhow::Result<()> {
             .help("MySQL DB connection string")
             .long("mysql_db")
             .takes_value(true),
+        )
+        .arg(
+          clap::Arg::with_name("num_db_connections")
+            .help("Number of concurrent database connections")
+            .long("num_db_connections")
+            .takes_value(true)
+            .default_value("10")
+            .validator(|s| {
+              s.parse::<u32>().map(|_| ()).map_err(|e| e.to_string())
+            }),
         ),
     )
     .get_matches();
 
   match matches.subcommand() {
     ("ingest", Some(ingest_args)) => {
-      let db: Arc<Mutex<_>> = connect_to_db(ingest_args).await?;
+      let db: Arc<_> = connect_to_db(ingest_args).await?;
 
       if let Some(pgn_filename) = ingest_args.value_of("pgn_file") {
         let f = std::fs::File::open(pgn_filename)?;
 
-        let games = game_stream(f);
-        let games = games.map(insert_queries);
+        let (tx, mut rx): (Sender<usize>, Receiver<usize>) = mpsc::channel(2);
+        let mut tasks = Vec::new();
+
+        tasks.push(tokio::spawn(async move {
+          let term = console::Term::stderr();
+          let mut total_games: usize = 0;
+          let mut total_queries: usize = 0;
+          while let Some(query_count) = rx.recv().await {
+            total_games += 1;
+            total_queries += query_count;
+            term.clear_line().unwrap();
+            term
+              .write_str(&format!(
+                "GAMES: {}\tINSERTS: {}",
+                total_games, total_queries,
+              ))
+              .unwrap();
+          }
+          term.write_line("").unwrap();
+        }));
+
+        let games = game_stream(f).map(insert_queries);
         pin_mut!(games);
         while let Some(queries) = games.next().await {
           let db = db.clone();
-          tokio::spawn(async move {
+          let tx = tx.clone();
+          tasks.push(tokio::spawn(async move {
+            let num_queries = queries.len();
             for query in queries {
-              let guard = db.lock().await;
-              query.execute(&*guard).await.unwrap();
+              query.execute(&*db).await.unwrap();
             }
-          });
+            tx.send(num_queries).await.unwrap();
+          }));
         }
+        drop(tx);
+        join_all(tasks).await;
       } else {
         unimplemented!()
       }
-
-      //let games = parse_games(ingest_args).await?;
-      //for game in games {
-      //  let db_game = game.game()?;
-      //  let game_id = db_game.id.clone();
-      //  let db_moves = game.moves()?;
-      //  let mut handles = Vec::new();
-      //  let pool_for_game_insert = db.clone();
-      //  db_game.insert_query().execute(&*pool_for_game_insert).await.unwrap();
-      //  for m in db_moves {
-      //    let db = db.clone();
-      //    let game_id = game_id.clone();
-      //    handles.push(tokio::spawn(async move {
-      //      m.insert_query(game_id.clone()).execute(&*db).await.unwrap()
-      //    }));
-      //  }
-      //  try_join_all(handles).await?;
-      //  bar.inc(1);
-      //}
     }
     _ => {
       unimplemented!("command not implemented")
@@ -118,55 +130,28 @@ async fn main() -> anyhow::Result<()> {
 
 async fn connect_to_db(
   args: &clap::ArgMatches<'_>,
-) -> sqlx::Result<Arc<Mutex<sqlx::Pool<sqlx::Any>>>> {
+) -> sqlx::Result<Arc<sqlx::Pool<sqlx::Any>>> {
   if let Some(db_path) = args.value_of("sqlite_db_file") {
     let connection_string = "sqlite://".to_owned() + db_path;
     let pool = sqlx::any::AnyPoolOptions::new()
-      .max_connections(MAX_DB_CONNECTIONS)
+      .max_connections(
+        args.value_of("num_db_connections").unwrap().parse::<u32>().unwrap(),
+      )
       .connect(&connection_string)
       .await?;
-    return Ok(Arc::new(Mutex::new(pool)));
+    return Ok(Arc::new(pool));
   } else if let Some(connection_string) = args.value_of("mysql_db") {
     let connection_string = "mysql://".to_owned() + connection_string;
     let pool = sqlx::any::AnyPoolOptions::new()
-      .max_connections(MAX_DB_CONNECTIONS)
+      .max_connections(
+        args.value_of("num_db_connections").unwrap().parse::<u32>().unwrap(),
+      )
       .connect(&connection_string)
       .await?;
-    return Ok(Arc::new(Mutex::new(pool)));
+    return Ok(Arc::new(pool));
   } else {
     unimplemented!("unsupported database type")
   }
-}
-
-async fn parse_games(
-  args: &clap::ArgMatches<'_>,
-) -> anyhow::Result<Vec<Box<dyn fantasy_chess::db::Recordable>>> {
-  if let Some(chess_com_id) = args.value_of("chess_com_game_id") {
-    let uri =
-      format!("https://www.chess.com/callback/live/game/{}", chess_com_id);
-    let body = reqwest::get(&uri).await?.text().await?;
-    let res: chess_com::GameResponse = serde_json::from_str(&body)?;
-    return Ok(vec![Box::new(res)]);
-  } else if let Some(pgn_filename) = args.value_of("pgn_file") {
-    let f = std::fs::File::open(pgn_filename)?;
-    let mut scanner = pgn_reader::BufferedReader::new(f);
-    let mut games: Vec<Box<dyn fantasy_chess::db::Recordable>> = Vec::new();
-    let mut game_counter = 0;
-    loop {
-      let mut visitor = pgn::GameScore::new();
-      let res = scanner.read_game(&mut visitor);
-      match res {
-        Ok(Some(Some(score))) => games.push(Box::new(score)),
-        Ok(Some(None)) => (),
-        Ok(None) => return Ok(games),
-        Err(e) => {
-          return Err(anyhow!("processing game {}: {}", game_counter, e))
-        }
-      }
-      game_counter += 1;
-    }
-  }
-  unimplemented!()
 }
 
 fn game_stream<R: std::io::Read>(

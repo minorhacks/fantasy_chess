@@ -368,6 +368,7 @@ dependencies = [
  "async-stream",
  "chrono",
  "clap",
+ "console",
  "futures",
  "indicatif",
  "itertools",

@@ -130,13 +130,6 @@ impl pgn_reader::Visitor for GameScore {
       chrono::NaiveDateTime::parse_from_str(&date_time, "%Y.%m.%d %H:%M:%S")
         .unwrap_or_else(|_| panic!("invalid date/time: {}", date_time))
         .timestamp();
-    println!(
-      "Game between {} and {} on {}. Standard: {}",
-      self.game.white_player_name,
-      self.game.black_player_name,
-      self.game.end_time,
-      !self.nonstandard_game,
-    );
     pgn_reader::Skip(self.nonstandard_game)
   }
 
