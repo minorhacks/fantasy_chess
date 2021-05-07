@@ -8,12 +8,14 @@ extern crate serde_json;
 extern crate thiserror;
 extern crate tokio;
 
-use std::{convert::TryInto, sync::Arc};
+use std::{convert::TryInto, pin::Pin, sync::Arc};
+use tokio::sync::Mutex;
 
 use anyhow::anyhow;
+use async_stream::stream;
 use fantasy_chess::chess_com;
 use fantasy_chess::pgn;
-use futures::future::try_join_all;
+use futures::{future::try_join_all, pin_mut, Stream, StreamExt};
 
 const MAX_DB_CONNECTIONS: u32 = 40;
 
@@ -67,27 +69,45 @@ async fn main() -> anyhow::Result<()> {
 
   match matches.subcommand() {
     ("ingest", Some(ingest_args)) => {
-      let db = connect_to_db(ingest_args).await?;
+      let db: Arc<Mutex<_>> = connect_to_db(ingest_args).await?;
 
-      let games = parse_games(ingest_args).await?;
-      let bar = indicatif::ProgressBar::new(games.len().try_into().unwrap());
-      for game in games {
-        let db_game = game.game()?;
-        let game_id = db_game.id.clone();
-        let db_moves = game.moves()?;
-        let mut handles = Vec::new();
-        let pool_for_game_insert = db.clone();
-        db_game.insert_query().execute(&*pool_for_game_insert).await.unwrap();
-        for m in db_moves {
+      if let Some(pgn_filename) = ingest_args.value_of("pgn_file") {
+        let f = std::fs::File::open(pgn_filename)?;
+
+        let games = game_stream(f);
+        let games = games.map(insert_queries);
+        pin_mut!(games);
+        while let Some(queries) = games.next().await {
           let db = db.clone();
-          let game_id = game_id.clone();
-          handles.push(tokio::spawn(async move {
-            m.insert_query(game_id.clone()).execute(&*db).await.unwrap()
-          }));
+          tokio::spawn(async move {
+            for query in queries {
+              let guard = db.lock().await;
+              query.execute(&*guard).await.unwrap();
+            }
+          });
         }
-        try_join_all(handles).await?;
-        bar.inc(1);
+      } else {
+        unimplemented!()
       }
+
+      //let games = parse_games(ingest_args).await?;
+      //for game in games {
+      //  let db_game = game.game()?;
+      //  let game_id = db_game.id.clone();
+      //  let db_moves = game.moves()?;
+      //  let mut handles = Vec::new();
+      //  let pool_for_game_insert = db.clone();
+      //  db_game.insert_query().execute(&*pool_for_game_insert).await.unwrap();
+      //  for m in db_moves {
+      //    let db = db.clone();
+      //    let game_id = game_id.clone();
+      //    handles.push(tokio::spawn(async move {
+      //      m.insert_query(game_id.clone()).execute(&*db).await.unwrap()
+      //    }));
+      //  }
+      //  try_join_all(handles).await?;
+      //  bar.inc(1);
+      //}
     }
     _ => {
       unimplemented!("command not implemented")
@@ -98,21 +118,21 @@ async fn main() -> anyhow::Result<()> {
 
 async fn connect_to_db(
   args: &clap::ArgMatches<'_>,
-) -> sqlx::Result<Arc<sqlx::Pool<sqlx::Any>>> {
+) -> sqlx::Result<Arc<Mutex<sqlx::Pool<sqlx::Any>>>> {
   if let Some(db_path) = args.value_of("sqlite_db_file") {
     let connection_string = "sqlite://".to_owned() + db_path;
     let pool = sqlx::any::AnyPoolOptions::new()
       .max_connections(MAX_DB_CONNECTIONS)
       .connect(&connection_string)
       .await?;
-    return Ok(Arc::new(pool));
+    return Ok(Arc::new(Mutex::new(pool)));
   } else if let Some(connection_string) = args.value_of("mysql_db") {
     let connection_string = "mysql://".to_owned() + connection_string;
     let pool = sqlx::any::AnyPoolOptions::new()
       .max_connections(MAX_DB_CONNECTIONS)
       .connect(&connection_string)
       .await?;
-    return Ok(Arc::new(pool));
+    return Ok(Arc::new(Mutex::new(pool)));
   } else {
     unimplemented!("unsupported database type")
   }
@@ -147,4 +167,36 @@ async fn parse_games(
     }
   }
   unimplemented!()
+}
+
+fn game_stream<R: std::io::Read>(
+  reader: R,
+) -> impl Stream<Item = Box<dyn fantasy_chess::db::Recordable>> {
+  stream! {
+    let mut scanner = pgn_reader::BufferedReader::new(reader);
+    loop {
+    let mut visitor = pgn::GameScore::new();
+    let res = scanner.read_game(&mut visitor).unwrap(); // TODO: Remove unwrap
+    match res {
+      Some(Some(score)) => {let b: Box<dyn fantasy_chess::db::Recordable> = Box::new(score); yield b;},
+      Some(None) => continue,
+      None => break,
+    };
+    }
+  }
+}
+
+fn insert_queries(
+  game: Box<dyn fantasy_chess::db::Recordable>,
+) -> Vec<sqlx::query::Query<'static, sqlx::Any, sqlx::any::AnyArguments<'static>>>
+{
+  let mut inserts = Vec::new();
+  let db_game = game.game().unwrap();
+  let game_id = db_game.id.clone();
+  inserts.push(db_game.insert_query());
+  let db_moves = game.moves().unwrap();
+  for m in db_moves {
+    inserts.push(m.insert_query(game_id.clone()));
+  }
+  inserts
 }
