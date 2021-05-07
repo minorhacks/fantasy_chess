@@ -1,13 +1,3 @@
-extern crate anyhow;
-extern crate clap;
-extern crate futures;
-extern crate itertools;
-extern crate maplit;
-extern crate reqwest;
-extern crate serde_json;
-extern crate thiserror;
-extern crate tokio;
-
 use std::sync::Arc;
 
 use tokio::sync::mpsc::{self, Receiver, Sender};
