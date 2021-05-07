@@ -697,8 +697,6 @@ dependencies = [
 [[package]]
 name = "minorhacks_chess"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7941a776c874e28d30bce091a1362888e1d11092b4a6ca8a17320d0164c2007"
 dependencies = [
  "arrayvec 0.5.2",
  "failure",

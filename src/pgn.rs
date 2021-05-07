@@ -14,6 +14,7 @@ pub struct GameScore {
   time: String,
 
   nonstandard_game: bool,
+  move_count: u32,
 }
 
 impl GameScore {
@@ -28,6 +29,7 @@ impl GameScore {
       time: String::new(),
 
       nonstandard_game: false,
+      move_count: 0,
     }
   }
 }
@@ -134,6 +136,7 @@ impl pgn_reader::Visitor for GameScore {
   }
 
   fn san(&mut self, san_plus: pgn_reader::SanPlus) {
+    self.move_count += 1;
     if let Ok(m) =
       chess::ChessMove::from_san(&self.board, &san_plus.to_string())
     {
@@ -144,13 +147,21 @@ impl pgn_reader::Visitor for GameScore {
           &dumbchess_square(m.get_dest()),
           promotion_value(m.get_promotion()),
         )
-        .expect("invalid move on dumbchess board");
+        .unwrap_or_else(|_| {
+          panic!(
+            "invalid move {} on dumbchess board in game {}: {:?}",
+            self.move_count, self.game.source_id, m
+          )
+        });
       let mut old_board = chess::Board::default();
       std::mem::swap(&mut old_board, &mut self.board);
       old_board.make_move(m, &mut self.board);
       self.moves.push(db_move);
     } else {
-      panic!("invalid move: {}. Board: {:?}", san_plus, self.board);
+      panic!(
+        "invalid move {}: {}. Board: {:?}",
+        self.move_count, san_plus, self.board
+      );
     }
   }
 
