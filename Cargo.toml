@@ -8,13 +8,19 @@ version = "0.1.0"
 
 [dependencies]
 anyhow = "1"
+async-stream = "0.3"
+chrono = "0.4"
+console = "0.14"
 clap = "2"
 futures = "0.3"
+itertools = "0.10"
 lazy_static = "1"
 maplit = "1"
-reqwest = "0.11"
+#minorhacks_chess = "0.1"
+minorhacks_chess = {path = "../chess"}
+pgn-reader = "0.18"
 serde = {version = "1", features = ["derive"]}
-serde_json = "1"
 sqlx = { version = "0.5", features = ["any", "runtime-tokio-rustls", "mysql", "sqlite"] }
 thiserror = "1"
 tokio = {version = "1", features = ["macros", "rt-multi-thread"]}
+uuid = {version = "0.8", features = ["v4"]}

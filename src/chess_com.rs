@@ -44,8 +44,9 @@ impl db::Recordable for GameResponse {
       _ => return Err(db::Error::GameTranslation),
     };
     Ok(db::Game {
+      id: uuid::Uuid::new_v4().to_string(),
       source: "chess.com".to_owned(),
-      id: self.game.id.to_string(),
+      source_id: self.game.id.to_string(),
       end_time: self.game.end_time,
       white_player_id: white_player.id.to_string(),
       white_player_name: white_player.username.clone(),

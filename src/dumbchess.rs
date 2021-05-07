@@ -245,7 +245,7 @@ impl From<char> for &Square {
   }
 }
 
-#[derive(Hash, Eq, PartialEq, Clone)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
 struct Piece {
   piece_type: &'static str,
   color: Color,
@@ -271,6 +271,7 @@ impl std::fmt::Display for Piece {
   }
 }
 
+#[derive(Clone)]
 pub struct Board {
   piece_map: HashMap<Square, Piece>,
   last_move: Option<(&'static str, Square, Square)>,
@@ -332,6 +333,7 @@ impl Board {
     // this move for the next iteration. We need the last move to detect en
     // passant situations.
     let last_move = std::mem::take(&mut self.last_move);
+    //println!("H5 has: {:?}", self.piece_map.get(&Square::H5));
 
     // Get the piece at the start location
     let (_loc, moved_piece) = self
@@ -356,8 +358,8 @@ impl Board {
         .get(&(start.clone(), end.clone()))
         .map(|f| f.0 == last_move.0 && f.1 == last_move.1 && f.2 == last_move.2)
         == Some(true)
+        && moved_piece.piece_type.starts_with("pawn")
       {
-        println!("EN PASSANT");
         // Remove the piece on the last move's end square
         captured_piece = Some(
           self
@@ -421,6 +423,7 @@ impl Board {
         self
           .piece_map
           .insert(end.clone(), moved_piece.clone().with_value(promotion_value));
+        //println!("{} moves to {}", moved_piece, end);
       }
     }
     self.last_move = Some((moved_piece.piece_type, start.clone(), end.clone()));
