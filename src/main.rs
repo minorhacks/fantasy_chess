@@ -23,11 +23,6 @@ async fn main() -> anyhow::Result<()> {
             .args(&["chess_com_game_id", "pgn_file"])
             .required(true),
         )
-        .group(
-          clap::ArgGroup::with_name("db")
-            .args(&["sqlite_db_file", "mysql_db"])
-            .required(true),
-        )
         .arg(
           clap::Arg::with_name("chess_com_game_id")
             .help("ID of the game on chess.com")
@@ -41,18 +36,11 @@ async fn main() -> anyhow::Result<()> {
             .takes_value(true),
         )
         .arg(
-          clap::Arg::with_name("sqlite_db_file")
-            .help(
-              "Path to sqlite DB file. Will be created if it doesn't exist.",
-            )
-            .long("sqlite_db_file")
-            .takes_value(true),
-        )
-        .arg(
-          clap::Arg::with_name("mysql_db")
-            .help("MySQL DB connection string")
-            .long("mysql_db")
-            .takes_value(true),
+          clap::Arg::with_name("db")
+            .help("Database connection string")
+            .long("db")
+            .takes_value(true)
+            .required(true),
         )
         .arg(
           clap::Arg::with_name("num_db_connections")
@@ -79,18 +67,24 @@ async fn main() -> anyhow::Result<()> {
 
   match matches.subcommand() {
     ("ingest", Some(ingest_args)) => {
-      let db: Arc<_> = connect_to_db(ingest_args).await?;
+      let db: Arc<_> = connect_to_db(
+        ingest_args.value_of("db").unwrap(),
+        ingest_args
+          .value_of("num_db_connections")
+          .unwrap()
+          .parse::<u32>()
+          .unwrap(),
+      )
+      .await?;
 
       if let Some(pgn_filename) = ingest_args.value_of("pgn_file") {
         let f = std::fs::File::open(pgn_filename)?;
 
-        let (completed_queries_tx, mut completed_queries_rx): (
-          Sender<usize>,
-          Receiver<usize>,
-        ) = mpsc::channel(1);
-
         let mut tasks = Vec::new();
         let mut query_workers_tx = VecDeque::new();
+
+        let (task, completed_queries_tx) = start_ui_task();
+        tasks.push(task);
 
         for _i in 0..ingest_args
           .value_of("num_insert_workers")
@@ -103,24 +97,6 @@ async fn main() -> anyhow::Result<()> {
           query_workers_tx.push_back(tx_chan);
         }
         drop(completed_queries_tx);
-
-        tasks.push(tokio::spawn(async move {
-          let term = console::Term::stderr();
-          let mut total_games: usize = 0;
-          let mut total_queries: usize = 0;
-          while let Some(query_count) = completed_queries_rx.recv().await {
-            total_games += 1;
-            total_queries += query_count;
-            term.clear_line().unwrap();
-            term
-              .write_str(&format!(
-                "GAMES: {}\tINSERTS: {}",
-                total_games, total_queries,
-              ))
-              .unwrap();
-          }
-          term.write_line("").unwrap();
-        }));
 
         let games = game_stream(f).map(insert_queries);
         pin_mut!(games);
@@ -170,30 +146,41 @@ fn start_query_executor(
   (task, parsed_games_tx)
 }
 
+fn start_ui_task() -> (JoinHandle<()>, mpsc::Sender<usize>) {
+  let (completed_queries_tx, mut completed_queries_rx): (
+    Sender<usize>,
+    Receiver<usize>,
+  ) = mpsc::channel(1);
+  let task = tokio::spawn(async move {
+    let term = console::Term::stderr();
+    let mut total_games: usize = 0;
+    let mut total_queries: usize = 0;
+    while let Some(query_count) = completed_queries_rx.recv().await {
+      total_games += 1;
+      total_queries += query_count;
+      term.clear_line().unwrap();
+      term
+        .write_str(&format!(
+          "GAMES: {}\tINSERTS: {}",
+          total_games, total_queries,
+        ))
+        .unwrap();
+    }
+    term.write_line("").unwrap();
+  });
+
+  (task, completed_queries_tx)
+}
+
 async fn connect_to_db(
-  args: &clap::ArgMatches<'_>,
+  connection_string: &str,
+  pool_size: u32,
 ) -> sqlx::Result<Arc<sqlx::Pool<sqlx::Any>>> {
-  if let Some(db_path) = args.value_of("sqlite_db_file") {
-    let connection_string = "sqlite://".to_owned() + db_path;
-    let pool = sqlx::any::AnyPoolOptions::new()
-      .max_connections(
-        args.value_of("num_db_connections").unwrap().parse::<u32>().unwrap(),
-      )
-      .connect(&connection_string)
-      .await?;
-    return Ok(Arc::new(pool));
-  } else if let Some(connection_string) = args.value_of("mysql_db") {
-    let connection_string = "mysql://".to_owned() + connection_string;
-    let pool = sqlx::any::AnyPoolOptions::new()
-      .max_connections(
-        args.value_of("num_db_connections").unwrap().parse::<u32>().unwrap(),
-      )
-      .connect(&connection_string)
-      .await?;
-    return Ok(Arc::new(pool));
-  } else {
-    unimplemented!("unsupported database type")
-  }
+  let pool = sqlx::any::AnyPoolOptions::new()
+    .max_connections(pool_size)
+    .connect(&connection_string)
+    .await?;
+  return Ok(Arc::new(pool));
 }
 
 fn game_stream<R: std::io::Read>(
